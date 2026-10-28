@@ -1,0 +1,45 @@
+name: Publish requested PicRope 1.2.3
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/release-1.2.3.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  release-1-2-3:
+    if: github.repository == 'fortruelove/PicRope' && startsWith(github.event.head_commit.message, 'release: PicRope 1.2.3')
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_SHA: ${{ github.sha }}
+    steps:
+      - name: Check out the authorized release commit
+        shell: pwsh
+        run: |
+          git init .
+          git remote add origin https://github.com/fortruelove/PicRope.git
+          git fetch --depth=1 origin $env:RELEASE_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Source checkout failed' }
+          git checkout --detach FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Source checkout failed' }
+      - name: Build and verify 1.2.3
+        shell: pwsh
+        run: |
+          ./build.ps1
+          ./tests/RunCardTests.ps1
+          ./build.ps1 -UpdateTests
+          ./package.ps1
+          $version = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $PWD 'build/PicRope.exe')).ProductVersion
+          if ($version -ne '1.2.3') { throw 'This one-time workflow can only publish 1.2.3' }
+      - name: Publish only v1.2.3 without overwriting an existing release
+        shell: pwsh
+        run: |
+          gh release view v1.2.3 --repo fortruelove/PicRope *> $null
+          if ($LASTEXITCODE -eq 0) { throw 'Release v1.2.3 already exists; refusing to overwrite it' }
+          gh release create v1.2.3 releases/PicRope-1.2.3-windows-x64.zip releases/PicRope-1.2.3-windows-x64.zip.sha256 --repo fortruelove/PicRope --target $env:RELEASE_SHA --title 'PicRope 1.2.3' --notes-file docs/releases/1.2.3.md --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
