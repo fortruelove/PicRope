@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -86,7 +86,7 @@ namespace ScreenLine
         internal int VisibleCount { get { return choices.Count; } }
         internal Button ChoiceFor(string path) { return choices[path]; }
 
-        public BasketWindow(Gallery gallery, Action<bool> setAutoHang, Action<CaptureItem> hang, Action<ShotAction, CaptureItem> act)
+        public BasketWindow(Gallery gallery, Action<bool> setAutoHang, Action<CaptureItem> hang, Action<ShotAction, CaptureItem> act, Func<Task<string>> paste = null)
         {
             this.gallery = gallery; this.setAutoHang = setAutoHang; this.hang = hang; this.act = act;
             Title = "图片篮子 · 图绳";
@@ -139,6 +139,12 @@ namespace ScreenLine
             PendingTab = LightTheme.Button("待挂", delegate { pendingOnly = true; Refresh(); });
             AllTab = LightTheme.Button("全部", delegate { pendingOnly = false; Refresh(); });
             PendingTab.Margin = new Thickness(0, 0, 10, 0); tabs.Children.Add(PendingTab); tabs.Children.Add(AllTab);
+            if(paste!=null) {
+                var pasteButton=LightTheme.Button("粘贴图片",async delegate {status.Text=await paste();});
+                pasteButton.Margin=new Thickness(12,0,0,0); tabs.Children.Add(pasteButton);
+                PreviewKeyDown+=async delegate(object sender,KeyEventArgs e) {if(e.Key==Key.V && Keyboard.Modifiers==ModifierKeys.Control){e.Handled=true;status.Text=await paste();}};
+            }
+            tabs.Children.Add(LightTheme.Button("关联 / 编辑图文…",delegate {var item=gallery.Collected.FirstOrDefault(i=>selected.Contains(i.Path)) ?? previewItem; if(item!=null)act(ShotAction.CardEdit,item);},"quiet"));
             var tabBar = new Border { BorderBrush = LightTheme.Brush("#E8EBEF"), BorderThickness = new Thickness(0, 0, 0, 1), Child = tabs };
             Grid.SetRow(tabBar, 1); body.Children.Add(tabBar);
 
@@ -252,6 +258,8 @@ namespace ScreenLine
             image.Children.Add(mark);
             var frame = new Border { Child = image, Background = LightTheme.Brush("#F1F4F8"), BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(8) };
             stack.Children.Add(frame);
+            string note=gallery.Note(item);
+            if(!string.IsNullOrEmpty(note)) stack.Children.Add(new TextBlock {Text=note,TextWrapping=TextWrapping.Wrap,TextTrimming=TextTrimming.CharacterEllipsis,MaxHeight=34,FontSize=12,Margin=new Thickness(4,4,4,0),ToolTip=note.Length>600?note.Substring(0,600)+"…":note});
             stack.Children.Add(new TextBlock { Text = TimeLabel(item.Written), FontSize = 11, Foreground = LightTheme.Brush("#65717F"), Margin = new Thickness(3, 7, 0, 0) });
             var button = new Button { Style = LightTheme.ButtonStyle, Tag = "quiet", VerticalAlignment = VerticalAlignment.Top };
             Action updateChoice = delegate
@@ -274,6 +282,8 @@ namespace ScreenLine
                 if (!selected.Add(item.Path)) selected.Remove(item.Path);
                 ShowPreview(item); updateChoice(); UpdateSelection();
             };
+            var menu=new ImageMenu(delegate(ShotAction action){act(action,item);}); menu.SetCard(false,!string.IsNullOrEmpty(note));
+            button.ContextMenu=menu;
             button.Content = stack; button.Height = Double.NaN; button.Padding = new Thickness(0); button.Margin = new Thickness(6, 0, 6, 16);
             button.Template = choiceTemplate;
             button.HorizontalContentAlignment = HorizontalAlignment.Stretch;

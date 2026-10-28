@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Specialized;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -18,9 +18,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("PicRope · 图绳")]
 [assembly: AssemblyProduct("PicRope")]
 [assembly: AssemblyDescription("图绳：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.2.0.0")]
-[assembly: AssemblyFileVersion("1.2.0.0")]
-[assembly: AssemblyInformationalVersion("1.2.0")]
+[assembly: AssemblyVersion("1.2.1.0")]
+[assembly: AssemblyFileVersion("1.2.1.0")]
+[assembly: AssemblyInformationalVersion("1.2.1")]
 
 namespace ScreenLine
 {
@@ -59,19 +59,22 @@ namespace ScreenLine
         public DesktopController(StateStore store, string screenshots, bool automaticUpdates = true)
         {
             this.automaticUpdates = automaticUpdates;
+            store.State.CollectClipboard=store.State.AutoClipboard; store.State.CollectTextClipboard=store.State.AutoClipboard;
             Gallery = new Gallery(store);
             Texts = new TextCollection(store);
             Captures = new CapturePipeline(Gallery, Application.Current.Dispatcher, screenshots);
             Shelf = new ShelfWindow(Gallery, Act, EnableClipboard);
             Shelf.BasketRequested += ShowBasket;
             Shelf.TextRequested += ShowTexts;
+            Texts.Changed += Shelf.Update;
             Texts.Changed += Shelf.UpdateTexts;
+            Gallery.Changed += Texts.Notify;
             events = new WindowsEvents();
             events.RegisterCapture(store.State.CaptureModifiers, store.State.CaptureKey);
             events.CaptureRequested += ShowCapture;
             events.ToggleRequested += Shelf.Toggle;
             events.ExitRequested += Exit;
-            events.ClipboardChanged += Captures.ClipboardChanged;
+            // One clipboard snapshot owns both image and text; no independent readers race.
             textClipboardSequence = WindowsNative.GetClipboardSequenceNumber();
             events.ClipboardChanged += CollectClipboardText;
             Captures.Arrived += Shelf.ShowNewCapture;
@@ -92,14 +95,9 @@ namespace ScreenLine
             TrayMenu.OnToggle(autoHang, Captures.AutoHang, delegate(bool value) { if (Captures.AutoHang != value) Captures.AutoHang = value; });
             Gallery.Changed += SyncAutoHang;
             collect = TrayMenu.Pictures;
-            TrayMenu.OnToggle(collect, Captures.CollectClipboard, delegate(bool value) { Captures.CollectClipboard = value; Shelf.Update(); });
             collectText = TrayMenu.Text;
-            TrayMenu.OnToggle(collectText, Texts.CollectClipboard, delegate(bool value)
-            {
-                textClipboardVersion++;
-                textClipboardSequence = WindowsNative.GetClipboardSequenceNumber();
-                Texts.CollectClipboard = value;
-            });
+            TrayMenu.OnToggle(collect, store.State.AutoClipboard, SetAutomaticClipboard);
+            collectText.Visibility = Visibility.Collapsed;
             TrayMenu.OnAction(TrayMenu.AppearanceButton, ShowAppearance);
             var more = TrayMenu.MoreMenu;
             MenuItem previewToggle = null;
@@ -133,7 +131,7 @@ namespace ScreenLine
                 try { WindowsShell.OpenInbox(store); }
                 catch (Exception error) { store.Log(error); Notice("无法打开收集文件夹：" + error.Message); }
             });
-            more.AddAction("全部取下（保留文件）", "clear", delegate { Gallery.Clear(); });
+            more.AddAction("全部取下（保留文件）", "clear", delegate { Gallery.Clear(); Texts.SetHanging(Texts.Items.ToArray(),false); });
             more.Separator();
             MenuItem startup = null;
             startup = more.AddAction("开机启动", "startup", delegate
@@ -256,7 +254,6 @@ namespace ScreenLine
 
         void EnableClipboard()
         {
-            Captures.CollectClipboard = true;
             collect.IsChecked = true;
         }
 
@@ -275,26 +272,86 @@ namespace ScreenLine
             SyncScreens();
         }
 
+        void SetAutomaticClipboard(bool value)
+        {
+            var state=Gallery.Store.State;
+            bool old=state.AutoClipboard, pictures=state.CollectClipboard, text=state.CollectTextClipboard;
+            state.AutoClipboard=value; state.CollectClipboard=value; state.CollectTextClipboard=value;
+            try { Gallery.Store.Save(); }
+            catch { state.AutoClipboard=old; state.CollectClipboard=pictures; state.CollectTextClipboard=text; throw; }
+            textClipboardVersion++; textClipboardSequence=WindowsNative.GetClipboardSequenceNumber();
+            Shelf.Update();
+        }
         async void CollectClipboardText()
         {
-            uint sequence = WindowsNative.GetClipboardSequenceNumber();
-            if (disposed || !Texts.CollectClipboard || sequence == textClipboardSequence) return;
-            textClipboardSequence = sequence;
-            int version = textClipboardVersion;
-            try
-            {
-                string content = await WindowsClipboard.ReadText(sequence);
-                if (disposed || !Texts.CollectClipboard || version != textClipboardVersion || sequence != WindowsNative.GetClipboardSequenceNumber()) return;
-                Texts.Add(content);
+            uint sequence=WindowsNative.GetClipboardSequenceNumber();
+            if(disposed || !Gallery.Store.State.AutoClipboard || sequence==textClipboardSequence) return;
+            textClipboardSequence=sequence; int version=textClipboardVersion;
+            try {
+                var card=await CardClipboard.Read(sequence,false);
+                if(disposed || !Gallery.Store.State.AutoClipboard || version!=textClipboardVersion || sequence!=WindowsNative.GetClipboardSequenceNumber()) return;
+                await AcceptCard(card, delegate { return !disposed && Gallery.Store.State.AutoClipboard && version == textClipboardVersion && sequence == WindowsNative.GetClipboardSequenceNumber(); });
+            } catch(Exception error) {if(!disposed)Gallery.Store.Log(error);}
+        }
+        internal async Task AcceptCard(ClipboardCard card, Func<bool> stillCurrent = null)
+        {
+            if(card==null || disposed || (stillCurrent!=null && !stillCurrent()))return;
+            if(card.Picture!=null) await Captures.ImportClipboardCard(card, stillCurrent);
+            else {
+                var text=Texts.Add(card.Text);
+                if(text!=null && Texts.AutoHang) Texts.SetHanging(new[]{text},true);
             }
-            catch (Exception error) { if (!disposed) Gallery.Store.Log(error); }
+            if(!disposed) Shelf.Update();
+        }
+        internal async Task<string> PasteCard(bool pictureRequired)
+        {
+            try {
+                var card=await CardClipboard.Read(WindowsNative.GetClipboardSequenceNumber(),true);
+                if(card==null || (pictureRequired && card.Picture==null))return pictureRequired ? "剪贴板中没有图片" : "剪贴板中没有文字或图片";
+                await AcceptCard(card);
+                return card.Picture!=null ? "已粘贴到图片篮子" : "已粘贴文字";
+            } catch(Exception error){Gallery.Store.Log(error); return "粘贴未完成，请重试";}
+        }
+        internal async void EditCard(CaptureItem item, bool readOnly)
+        {
+            if (Basket!=null) Basket.Close();
+            if (TextWindow!=null) TextWindow.Close();
+            Shelf.ChoosingTexts=true;
+            try {
+                var dialog=new CardEditorWindow(Gallery,item,readOnly) {Owner=Shelf};
+                if(dialog.ShowDialog()!=true || readOnly)return;
+                CaptureItem picture=dialog.SelectedPicture;
+                string newPath=null;
+                if(dialog.NewPicture!=null) {
+                    string path=Path.Combine(Gallery.Store.Inbox,"配图_"+Guid.NewGuid().ToString("N")+dialog.NewPicture.Extension);
+                    Directory.CreateDirectory(Gallery.Store.Inbox);
+                    await Task.Run(()=>File.WriteAllBytes(path,dialog.NewPicture.Bytes));
+                    newPath=path;
+                    picture=new CaptureItem(path,ImageContent.Decode(dialog.NewPicture.Bytes));
+                }
+                string content=dialog.Body.Text;
+                bool append=dialog.SelectedText!=null && dialog.Append;
+                if(picture!=null && append && !item.IsText && !string.IsNullOrEmpty(Gallery.Note(item))) {
+                    content=Gallery.Note(item)+"\n"+content;
+                    append=false;
+                }
+                if(picture!=null && !string.IsNullOrEmpty(Gallery.Note(picture))) {
+                    var choice=MessageBox.Show(dialog.Owner,"所选图片已有备注。是：追加文字；否：替换备注；取消：放弃合并。","合并内容卡片",MessageBoxButton.YesNoCancel);
+                    if(choice==MessageBoxResult.Cancel)return;
+                    append=choice==MessageBoxResult.Yes;
+                }
+                try { Gallery.SaveCard(item,picture,content,dialog.SelectedText,append,newPath!=null); }
+                catch { if(newPath!=null)File.Delete(newPath); throw; }
+                Texts.Notify(); Shelf.Update();
+            } catch(Exception error){Gallery.Store.Log(error);Notice("保存未完成："+error.Message);}
+            finally {Shelf.ChoosingTexts=false;}
         }
 
         internal void ShowBasket()
         {
             if (Basket != null) { Basket.Activate(); return; }
             Gallery.Prune();
-            Basket = new BasketWindow(Gallery, delegate(bool value) { Captures.AutoHang = value; }, Captures.Hang, Act);
+            Basket = new BasketWindow(Gallery, delegate(bool value) { Captures.AutoHang = value; }, Captures.Hang, Act, delegate { return PasteCard(true); });
             Basket.Owner = Shelf;
             Shelf.ChoosingBasket = true;
             Shelf.Reveal(true, false, 0);
@@ -307,7 +364,7 @@ namespace ScreenLine
             if (TextWindow != null) { TextWindow.Close(); return; }
             Shelf.Reveal(true, false, 0);
             Shelf.ChoosingTexts = true;
-            TextWindow = new TextWindow(Texts, Shelf);
+            TextWindow = new TextWindow(Texts, Shelf, delegate { return PasteCard(false); }, delegate(TextItem item) { EditCard(new CaptureItem(item), false); });
             TextWindow.Closed += delegate { TextWindow = null; Shelf.ChoosingTexts = false; };
             TextWindow.Show();
         }
@@ -356,10 +413,26 @@ namespace ScreenLine
         {
             try
             {
+                if (action==ShotAction.CardEdit || (item.IsText && action==ShotAction.Edit)) {EditCard(item,false);return;}
+                if (action==ShotAction.Open && (item.IsText || !string.IsNullOrEmpty(Gallery.Note(item)))) {EditCard(item,true);return;}
+                if (action==ShotAction.CopyText || (item.IsText && action==ShotAction.Copy)) {
+                    string value=item.IsText ? item.Text.Content : Gallery.Note(item);
+                    var data=new DataObject();data.SetText(value);data.SetData(ClipboardRules.OwnFormat,"1");
+                    await WindowsClipboard.Write(data); if(item.IsText ? item.Text.Hanging : Gallery.Contains(item.Path)) Shelf.ShowCopied(item.Path); return;
+                }
+                if(item.IsText) {
+                    if(action==ShotAction.Remove)Texts.SetHanging(new[]{item.Text},false);
+                    else if(action==ShotAction.Trash)Texts.Remove(item.Text);
+                    return;
+                }
+                if(action==ShotAction.Split){Gallery.Split(item,Texts);return;}
+                if(action==ShotAction.RemoveNote){Gallery.SetNote(item,"");return;}
+                if(action==ShotAction.RemovePicture){Gallery.RemovePicture(item,Texts);return;}
                 if (!File.Exists(item.Path)) { Gallery.Prune(); return; }
                 switch (action)
                 {
                     case ShotAction.Copy:
+                    case ShotAction.CopyBoth:
                         var payload = new DataObject();
                         byte[] png;
                         using (var stream = new FileStream(item.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
@@ -371,6 +444,7 @@ namespace ScreenLine
                         payload.SetData("PNG", new MemoryStream(png));
                         payload.SetFileDropList(new StringCollection { item.Path });
                         payload.SetData(ClipboardRules.OwnFormat, "1");
+                        if(action==ShotAction.CopyBoth && !string.IsNullOrEmpty(Gallery.Note(item))) payload.SetText(Gallery.Note(item));
                         await WindowsClipboard.Write(payload);
                         Shelf.ShowCopied(item.Path);
                         break;
@@ -407,10 +481,12 @@ namespace ScreenLine
                         Gallery.Remove(item);
                         break;
                     case ShotAction.Trash:
+                        if(!string.IsNullOrEmpty(Gallery.Note(item)) && MessageBox.Show(Shelf,"将一起删除图片和备注，图片会移到回收站。是否继续？","删除内容卡片",MessageBoxButton.YesNo)!=MessageBoxResult.Yes)return;
                         FileSystem.DeleteFile(item.Path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
                         Shelf.ShowDiscard(item);
                         Gallery.Remove(item);
                         Gallery.Prune();
+                        Gallery.Store.State.ImageNotes.Remove(item.Path); Gallery.Store.Save();
                         break;
                 }
             }
