@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -18,6 +18,7 @@ namespace ScreenLine
         public bool CollectClipboard { get; set; }
         public bool CollectTextClipboard { get; set; }
         public bool AutoClipboard { get; set; }
+        public bool KeepRopeVisible { get; set; }
         public bool AutoTextHang { get; set; }
         public Dictionary<string, string> ImageNotes { get; set; }
         public List<string> CardOrder { get; set; }

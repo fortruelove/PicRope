@@ -18,9 +18,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("PicRope · 图绳")]
 [assembly: AssemblyProduct("PicRope")]
 [assembly: AssemblyDescription("图绳：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.2.1.0")]
-[assembly: AssemblyFileVersion("1.2.1.0")]
-[assembly: AssemblyInformationalVersion("1.2.1")]
+[assembly: AssemblyVersion("1.2.2.0")]
+[assembly: AssemblyFileVersion("1.2.2.0")]
+[assembly: AssemblyInformationalVersion("1.2.2")]
 
 namespace ScreenLine
 {
@@ -87,6 +87,10 @@ namespace ScreenLine
             TrayMenu.Opened += delegate { SyncScreens(); };
             TrayMenu.ScreenMenu.Opened += delegate { SyncScreens(); };
             TrayMenu.OnAction(TrayMenu.VisibilityButton, delegate { Shelf.Toggle(); });
+            TrayMenu.OnToggle(TrayMenu.PinRope, store.State.KeepRopeVisible, delegate(bool value) {
+                try {Shelf.SetKeepRopeVisible(value);}
+                catch(Exception error){store.Log(error);TrayMenu.PinRope.IsChecked=store.State.KeepRopeVisible;Notice("无法保存置顶设置，请重试。");}
+            });
             if (events.ShortcutAvailable) TrayMenu.Shortcut.Text = "Ctrl+Alt+T";
             else Notice("Ctrl+Alt+T 已被占用，可点击托盘图标打开。");
             TrayMenu.OnAction(TrayMenu.BasketButton, ShowBasket);
@@ -206,7 +210,7 @@ namespace ScreenLine
                 else if (revealed) Shelf.Reveal(true, false, 2);
             }
             catch (Exception error) { if (!disposed) { Gallery.Store.Log(error); Notice("截图未完成，请重试。"); } }
-            finally { if (Capture != null) Capture.Close(); Capture = null; Shelf.Capturing = false; }
+            finally { if (Capture != null) Capture.Close(); Capture = null; Shelf.Capturing = false; if(Gallery.Store.State.KeepRopeVisible)Shelf.Reveal(true,false,0); }
         }
 
         async Task CheckForUpdates(bool manual)

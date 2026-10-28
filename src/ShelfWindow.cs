@@ -33,10 +33,6 @@ namespace ScreenLine
             new GradientStop(Colors.White, 0.97), new GradientStop(Colors.White, 1)
         }, new Point(0, 0), new Point(1, 0));
         readonly Dictionary<string, ShotCard> cards = new Dictionary<string, ShotCard>(StringComparer.OrdinalIgnoreCase);
-        readonly Border hint = new Border();
-        readonly Button enable = new Button();
-        readonly TextBlock helpTitle = new TextBlock();
-        readonly TextBlock helpDetail = new TextBlock();
         readonly TextBlock basketCount = new TextBlock();
         readonly Image basketImage = new Image { Width = 112, Stretch = Stretch.Uniform, IsHitTestVisible = false };
         readonly RotateTransform basketTurn = new RotateTransform();
@@ -44,7 +40,6 @@ namespace ScreenLine
         readonly SpringMotion basketMotion = new SpringMotion(0.5, 0.5, 0);
         readonly SpringMotion basketCounterMotion = new SpringMotion(0.28, 0.65, 1);
         int pendingPictures;
-        readonly Button openBasket = new Button();
         internal readonly Button BasketButton = new Button();
         public event Action BasketRequested;
         internal readonly Button TextButton = new Button();
@@ -202,30 +197,6 @@ namespace ScreenLine
             textHolder.Children.Add(TextButton); Canvas.SetLeft(TextButton, 8);
             root.Children.Add(textHolder); UpdateTexts();
 
-            var help = new StackPanel { Margin = new Thickness(20, 14, 20, 14) };
-            helpTitle.FontSize = 15; helpTitle.FontWeight = FontWeights.SemiBold; helpTitle.Foreground = Brushes.Black; helpTitle.HorizontalAlignment = HorizontalAlignment.Center;
-            helpDetail.FontSize = 12; helpDetail.Foreground = Brushes.DimGray; helpDetail.Margin = new Thickness(0, 8, 0, 12); helpDetail.HorizontalAlignment = HorizontalAlignment.Center;
-            help.Children.Add(helpTitle); help.Children.Add(helpDetail);
-            openBasket.Content = "打开图片篮子"; openBasket.Style = LightTheme.ButtonStyle; openBasket.Tag = "primary";
-            openBasket.HorizontalAlignment = HorizontalAlignment.Center; openBasket.Margin = new Thickness(0, 0, 0, 8);
-            openBasket.Click += delegate { if (BasketRequested != null) BasketRequested(); }; help.Children.Add(openBasket);
-            enable.Content = "开启剪贴板收集";
-            enable.Style = LightTheme.ButtonStyle;
-            enable.Tag = "primary";
-            enable.Padding = new Thickness(14, 5, 14, 5);
-            enable.HorizontalAlignment = HorizontalAlignment.Center;
-            enable.Focusable = false;
-            enable.Click += delegate { enableClipboard(); Update(); };
-            help.Children.Add(enable);
-            hint.Child = help;
-            hint.Width = 380;
-            hint.Background = new SolidColorBrush(Color.FromArgb(248, 255, 255, 255));
-            hint.CornerRadius = new CornerRadius(16);
-            hint.BorderBrush = new SolidColorBrush(Color.FromRgb(218, 224, 232));
-            hint.BorderThickness = new Thickness(1);
-            hint.Effect = new DropShadowEffect { BlurRadius = 16, ShadowDepth = 3, Opacity = 0.18 };
-            content.Children.Add(hint);
-
             SourceInitialized += delegate
             {
                 Handle = new WindowInteropHelper(this).Handle;
@@ -332,15 +303,10 @@ namespace ScreenLine
                 PinnedImageWindow pinnedImage;
                 if (changed && pins.TryGetValue(item.Path, out pinnedImage)) pinnedImage.UpdateImage();
             }
-            hint.Visibility = gallery.Hanging.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
-            helpTitle.Text = gallery.Store.State.AutoHang ? "截图会挂在这里" : "从图片篮子里挑几张挂上";
-            helpDetail.Text = gallery.Store.State.AutoHang ? "Win + PrtScn · 或开启剪贴板截图收集" : "截图会先收好，需要时再挂上绳子";
-            openBasket.Visibility = gallery.Store.State.AutoHang ? Visibility.Collapsed : Visibility.Visible;
             int pending = gallery.Collected.Count(i => !gallery.Contains(i.Path));
             if (pending > pendingPictures && Revealed && !flights.Any(flight => flight.Collecting || flight.Falling)) BasketReceived();
             pendingPictures = pending; basketCount.Text = pending.ToString();
             System.Windows.Automation.AutomationProperties.SetItemStatus(BasketButton, basketCount.Text + " 张待挂");
-            enable.Visibility = gallery.Store.State.CollectClipboard ? Visibility.Collapsed : Visibility.Visible;
             LayoutCards();
         }
 
@@ -356,8 +322,6 @@ namespace ScreenLine
             ropeMotion.Target = 18 + Math.Min(7, hanging.Length) * 1.2;
             if (!Revealed) ropeMotion.Snap(ropeMotion.Target);
             DrawRope();
-            Canvas.SetLeft(hint, (content.Width - hint.Width) / 2);
-            Canvas.SetTop(hint, 56);
             for (int i = 0; i < hanging.Length; i++)
             {
                 ShotCard card = cards[hanging[i].Path];
@@ -579,12 +543,25 @@ namespace ScreenLine
             catch (Exception error) { gallery.Store.Log(error); card.ResetClip(); }
         }
 
+        public void SetKeepRopeVisible(bool value)
+        {
+            bool previous=gallery.Store.State.KeepRopeVisible;
+            if(previous!=value) {
+                gallery.Store.State.KeepRopeVisible=value;
+                try {gallery.Store.Save();} catch {gallery.Store.State.KeepRopeVisible=previous;throw;}
+            }
+            pinned=false;
+            if(value)MoveToDisplay();
+            Reveal(true,false,0);
+        }
+
         public void Reveal(bool shown, bool pin, double seconds)
         {
+            if(gallery.Store.State.KeepRopeVisible && !Capturing) shown=true;
             pinned = pin;
             peekUntil = DateTime.UtcNow.AddSeconds(seconds);
             awaySince = DateTime.MaxValue;
-            if (shown && WindowsNative.FullScreen(Display, Handle)) return;
+            if (shown && !gallery.Store.State.KeepRopeVisible && WindowsNative.FullScreen(Display, Handle)) return;
             if (shown == Revealed) return;
             Revealed = shown;
             revealMotion.Target = shown ? 0 : -240;
@@ -678,7 +655,6 @@ namespace ScreenLine
             Point local = PointFromScreen(new Point(cursor.X, cursor.Y));
             var photoArea = viewport.TransformToAncestor(this).TransformBounds(new Rect(viewport.RenderSize));
             IEnumerable<FrameworkElement> targets = cards.Values.Where(c => !c.Flying && !c.Detached).SelectMany(c => new FrameworkElement[] { c.Surface, c.Grip });
-            if (hint.IsVisible) targets = targets.Concat(new[] { hint });
             targets = targets.Concat(new[] { BasketButton, TextButton }.Where(button => button.IsVisible));
             foreach (var target in targets)
             {
@@ -711,7 +687,7 @@ namespace ScreenLine
                 Reveal(false, false, 0);
             }
             previousDown = down;
-            if (nearTop && !down && !suppressEdge && !WindowsNative.FullScreen(screen, Handle))
+            if (nearTop && !down && !suppressEdge && (gallery.Store.State.KeepRopeVisible || !WindowsNative.FullScreen(screen, Handle)))
             {
                 if (edgeSince == DateTime.MaxValue) edgeSince = now;
                 if (now - edgeSince >= TimeSpan.FromMilliseconds(320) && (!Revealed || screen.DeviceName != Display.DeviceName))
@@ -721,7 +697,7 @@ namespace ScreenLine
                 }
             }
             else edgeSince = DateTime.MaxValue;
-            if (WindowsNative.FullScreen(Display, Handle)) { Reveal(false, false, 0); return; }
+            if (!gallery.Store.State.KeepRopeVisible && WindowsNative.FullScreen(Display, Handle)) { Reveal(false, false, 0); return; }
             bool busy = cards.Values.Any(c => c.Busy);
             WindowsNative.PassMouse(Handle, !Revealed || (!over && !busy));
             if (!Revealed) return;
@@ -737,7 +713,7 @@ namespace ScreenLine
             WindowsNative.GetWindowRect(Handle, out bounds);
             bool inside = cursor.X >= bounds.Left && cursor.X < bounds.Right && cursor.Y >= Display.Bounds.Top && cursor.Y < bounds.Bottom;
             if (inside) pinned = false;
-            if (inside || pinned || busy || viewing || ChoosingAppearance || ChoosingBasket || ChoosingTexts || now < peekUntil) awaySince = DateTime.MaxValue;
+            if (inside || gallery.Store.State.KeepRopeVisible || pinned || busy || viewing || ChoosingAppearance || ChoosingBasket || ChoosingTexts || now < peekUntil) awaySince = DateTime.MaxValue;
             else
             {
                 if (awaySince == DateTime.MaxValue) awaySince = now;

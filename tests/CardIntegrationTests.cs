@@ -16,6 +16,11 @@ app.Startup+=async delegate {DesktopController c=null; try {
 root=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"test-data","cards-ui-"+Guid.NewGuid().ToString("N"));
 var store=new StateStore(root);c=new DesktopController(store,Path.Combine(root,"screenshots"),false);await c.Start();
 Check(!store.State.AutoClipboard && c.Shelf.BasketButton.IsVisible && c.Shelf.TextButton.IsVisible,"自动获取关闭时仍可进入篮子和信封手动粘贴");
+Check(!Find(c.Shelf,"截图会挂在这里"),"空绳不显示截图引导框");
+c.TrayMenu.PinRope.IsChecked=true;c.Shelf.Reveal(false,false,0);
+Check(c.Shelf.Revealed && new StateStore(root).State.KeepRopeVisible,"置顶后立即展示，阻止收起并记住设置");
+c.Shelf.Capturing=true;c.Shelf.Reveal(false,false,0);Check(!c.Shelf.Revealed,"截图时临时隐藏置顶绳子");c.Shelf.Capturing=false;c.Shelf.Reveal(true,false,0);
+c.TrayMenu.PinRope.IsChecked=false;c.Shelf.Reveal(false,false,0);Check(!c.Shelf.Revealed && !new StateStore(root).State.KeepRopeVisible,"取消置顶后允许恢复收起");c.Shelf.Reveal(true,true,0);
 c.TrayMenu.Pictures.IsChecked=true;Check(store.State.AutoClipboard && new StateStore(root).State.AutoClipboard,"统一自动获取开关持久保存");c.TrayMenu.Pictures.IsChecked=false;
 await c.AcceptCard(new ClipboardCard {Text="可以挂绳的文字\n保留完整换行与缩进"});
 Check(c.Texts.Items.Count==1 && c.Gallery.Hanging.Count==1 && c.Shelf.CardFor("text:"+c.Texts.Items[0].Id)!=null,"文字进入信封并显示在绳子");
@@ -42,7 +47,7 @@ Console.WriteLine("卡片集成测试："+passed+" 通过，0 失败");
 }catch(Exception error){Console.WriteLine("失败："+error);Environment.ExitCode=1;}finally{if(c!=null)c.Dispose();app.Shutdown(Environment.ExitCode);}};
 app.Run();
 }
-static bool Find(DependencyObject node,string label){var content=node as ContentControl;if(content!=null && content.Content as string==label)return true;for(int i=0;i<VisualTreeHelper.GetChildrenCount(node);i++)if(Find(VisualTreeHelper.GetChild(node,i),label))return true;return false;}
+static bool Find(DependencyObject node,string label){var text=node as TextBlock;if(text!=null && text.Text==label)return true;var content=node as ContentControl;if(content!=null && content.Content as string==label)return true;for(int i=0;i<VisualTreeHelper.GetChildrenCount(node);i++)if(Find(VisualTreeHelper.GetChild(node,i),label))return true;return false;}
 static void Render(FrameworkElement element,string name){element.UpdateLayout();var bitmap=new RenderTargetBitmap((int)Math.Ceiling(element.ActualWidth),(int)Math.Ceiling(element.ActualHeight),96,96,PixelFormats.Pbgra32);bitmap.Render(element);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));var directory=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"card-previews");Directory.CreateDirectory(directory);using(var file=File.Create(Path.Combine(directory,name)))encoder.Save(file);}
 }
 }
