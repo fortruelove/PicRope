@@ -35,7 +35,16 @@ var missing=new DataObject();missing.SetText("有效文字");missing.SetData(Dat
 if(CardClipboard.ReadData(missing,true).GetAwaiter().GetResult().Text!="有效文字")throw new Exception("失效图片文件不能丢掉有效文字");
 var file=Path.Combine(Path.GetTempPath(),"PicRope-test-"+Guid.NewGuid().ToString("N")+".png");File.WriteAllBytes(file,ImageContent.EncodeClipboard(image));
 try{var files=new DataObject(DataFormats.FileDrop,new[]{file});if(CardClipboard.ReadData(files,false).GetAwaiter().GetResult().Picture==null)throw new Exception("自动获取支持复制图片文件");}finally{File.Delete(file);}
-Console.WriteLine("剪贴板卡片测试：12 通过，0 失败");
+var local=Path.Combine(Path.GetTempPath(),"PicRope-qq-"+Guid.NewGuid().ToString("N")+".png");File.WriteAllBytes(local,ImageContent.EncodeClipboard(image));
+try {
+var qq=new DataObject();qq.SetText("QQ混合文字\n完整备注");qq.SetData(DataFormats.Html,"<html><body><!--StartFragment--><p>QQ混合文字</p><img src=\""+new Uri(local).AbsoluteUri+"\" /><!--EndFragment--></body></html>");
+var mixedCard=CardClipboard.ReadData(qq,true).GetAwaiter().GetResult();
+if(mixedCard.Picture==null || mixedCard.Text!="QQ混合文字\n完整备注")throw new Exception("QQ本地HTML图片和文字必须作为同一快照读取");
+if(CardClipboard.ReadData(qq,false).GetAwaiter().GetResult().Picture==null)throw new Exception("自动获取也支持QQ本地HTML图片");
+}finally{File.Delete(local);}
+var remote=new DataObject();remote.SetText("保留文字");remote.SetData(DataFormats.Html,"<img src='https://example.invalid/private.png'>");
+if(CardClipboard.ReadData(remote,true).GetAwaiter().GetResult().Picture!=null)throw new Exception("不自动下载远程HTML图片");
+Console.WriteLine("剪贴板卡片测试：15 通过，0 失败");
 }
 }
 internal sealed class FaultyData : IDataObject {

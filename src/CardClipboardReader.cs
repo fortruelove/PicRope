@@ -4,6 +4,8 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Media.Imaging;
+using System.Net;
+using System.Text.RegularExpressions;
 
 namespace ScreenLine {
 internal sealed class ClipboardCard { public ClipboardPicture Picture; public string Text; }
@@ -69,7 +71,35 @@ internal static class CardClipboard {
                 } catch(IOException) {} catch(UnauthorizedAccessException) {} catch(ArgumentException) {} catch(NotSupportedException) {}
             }
         }
+        if(card.Picture==null)card.Picture=ReadHtmlPicture(Get(data,DataFormats.Html) as string);
         return card.Picture==null && string.IsNullOrWhiteSpace(card.Text) ? null : card;
+    }
+    // QQ mixed messages expose local cached images through CF_HTML, not Bitmap/PNG.
+    // Read only one explicit local image; never execute HTML or fetch a remote URL.
+    internal static ClipboardPicture ReadHtmlPicture(string html) {
+        if(string.IsNullOrEmpty(html) || html.Length>1024*1024)return null;
+        try {
+            var options=RegexOptions.IgnoreCase|RegexOptions.CultureInvariant;
+            var timeout=TimeSpan.FromMilliseconds(200);
+            const string tail=@"(?:[^'"">]|""[^""]*""|'[^']*')*";
+            var images=Regex.Matches(html,@"<\s*img\b"+tail+@">",options,timeout);
+            if(images.Count!=1)return null;
+            var source=Regex.Match(images[0].Value,@"\ssrc\s*=\s*(?:""(?<url>[^""]*)""|'(?<url>[^']*)'|(?<url>[^\s>]+))",options,timeout);
+            if(!source.Success)return null;
+            string address=WebUtility.HtmlDecode(source.Groups["url"].Value);
+            Uri uri;
+            if(!Uri.TryCreate(address,UriKind.Absolute,out uri) || !uri.IsFile || uri.IsUnc)return null;
+            string path=uri.LocalPath;
+            if(path.StartsWith(@"\\",StringComparison.Ordinal))return null;
+            byte[] bytes;
+            using(var file=new FileStream(path,FileMode.Open,FileAccess.Read,FileShare.ReadWrite|FileShare.Delete))bytes=WindowsClipboard.ReadImageBytes(file);
+            if(!Valid(bytes))return null;
+            // Re-encode to PNG so even cache files without a normal extension import correctly.
+            using(var stream=new MemoryStream(bytes)) {
+                var picture=BitmapDecoder.Create(stream,BitmapCreateOptions.PreservePixelFormat,BitmapCacheOption.OnLoad).Frames[0];
+                return new ClipboardPicture {Bytes=ImageContent.EncodeClipboard(picture),Extension=".png"};
+            }
+        } catch(IOException){return null;}catch(UnauthorizedAccessException){return null;}catch(ArgumentException){return null;}catch(NotSupportedException){return null;}catch(RegexMatchTimeoutException){return null;}catch(ExternalException){return null;}
     }
     static ClipboardPicture Png(byte[] bytes) {return Valid(bytes)?new ClipboardPicture{Bytes=bytes,Extension=".png"}:null;}
     static byte[] Bytes(object value) {var bytes=value as byte[];if(bytes!=null)return bytes;var stream=value as Stream;return stream==null?null:WindowsClipboard.ReadImageBytes(stream);}
