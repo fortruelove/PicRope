@@ -1,4 +1,4 @@
-﻿using System.Threading.Tasks;
+using System.Threading.Tasks;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -60,8 +60,8 @@ namespace ScreenLine
         internal readonly TextBox Search = new TextBox();
         internal readonly ListBox List = new ListBox();
         internal readonly Button SelectAllButton, DeleteSelectedButton;
-        bool refreshing, confirming;
-        string checkedSignature;
+        bool refreshing;
+
         internal int VisibleCount { get { return List.Items.Count; } }
         internal string Feedback { get { return feedback.Text; } }
         bool closed;
@@ -107,7 +107,7 @@ namespace ScreenLine
             searchPanel.Children.Add(new Border { CornerRadius = new CornerRadius(7), BorderBrush = LightTheme.Brush("#DCE2EA"), BorderThickness = new Thickness(1), Child = Search });
             var placeholder = new TextBlock { Text = "搜索文字", IsHitTestVisible = false, Margin = new Thickness(11, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, FontSize = 13, Foreground = LightTheme.Brush("#8390A1") };
             searchPanel.Children.Add(placeholder);
-            Search.TextChanged += delegate { confirming = false; placeholder.Visibility = Search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; Refresh(); };
+            Search.TextChanged += delegate { placeholder.Visibility = Search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; Refresh(); };
             Grid.SetRow(searchPanel, 1); body.Children.Add(searchPanel);
 
             List.BorderThickness = new Thickness(0); List.Background = Brushes.Transparent; List.Margin = new Thickness(10, 0, 10, 10);
@@ -245,13 +245,10 @@ namespace ScreenLine
         {
             var items = List.Items.Cast<TextItem>().ToArray();
             int selected = items.Count(item => item.IsMarked);
-            string signature = string.Join("|", items.Where(item => item.IsMarked).Select(item => item.Id).OrderBy(id => id));
-            if (signature != checkedSignature) confirming = false;
-            checkedSignature = signature;
             SelectAllButton.IsEnabled = items.Length > 0;
             SelectAllButton.Content = selected == items.Length && selected > 0 ? "取消全选" : "全选";
             DeleteSelectedButton.IsEnabled = selected > 0;
-            DeleteSelectedButton.Content = confirming ? "确认删除 " + selected + " 条" : selected == 0 ? "删除所选" : "删除所选（" + selected + "）";
+            DeleteSelectedButton.Content = selected == 0 ? "删除所选" : "删除所选（" + selected + "）";
         }
 
         void SelectAll()
@@ -266,7 +263,6 @@ namespace ScreenLine
         {
             var items = List.Items.Cast<TextItem>().Where(item => item.IsMarked).ToArray();
             if (items.Length == 0) return;
-            if (!confirming) { confirming = true; DeleteSelectedButton.Content = "确认删除 " + items.Length + " 条"; return; }
             try { texts.RemoveMany(items); ShowFeedback("已删除 " + items.Length + " 条"); }
             catch (Exception error) { texts.Store.Log(error); ShowFeedback("删除未完成，请重试"); UpdateBatch(); }
         }

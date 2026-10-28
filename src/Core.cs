@@ -544,6 +544,26 @@ namespace ScreenLine
             }
         }
         public string Note(CaptureItem item) { string note; return Store.State.ImageNotes.TryGetValue(item.Path, out note) ? note : ""; }
+        public bool Reorder(string source, int insertion, IEnumerable<string> visible, bool onRope)
+        {
+            if (!onRope) return false;
+            var all = Hanging.Select(i => i.Path).ToList();
+            var valid = new HashSet<string>(all, StringComparer.OrdinalIgnoreCase);
+            var keys = visible.Where(valid.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            int from = keys.FindIndex(key => string.Equals(key, source, StringComparison.OrdinalIgnoreCase));
+            if (from < 0) return false;
+            insertion = Math.Max(0, Math.Min(keys.Count, insertion));
+            keys.RemoveAt(from);
+            if (from < insertion) insertion--;
+            keys.Insert(insertion, source);
+            var shown = new HashSet<string>(keys, StringComparer.OrdinalIgnoreCase);
+            int next = 0;
+            var reordered = all.Select(key => shown.Contains(key) ? keys[next++] : key).ToList();
+            // Keep not-yet-restored images and temporarily unmounted cards in the persisted order.
+            var saved = Store.State.CardOrder;
+            ChangeCards(delegate { Store.State.CardOrder = reordered.Concat(saved).Distinct(StringComparer.OrdinalIgnoreCase).ToList(); });
+            return true;
+        }
         public void SetNote(CaptureItem item, string note)
         {
             if (!Collected.Contains(item)) return;

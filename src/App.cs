@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Specialized;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -18,9 +18,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("PicRope · 图绳")]
 [assembly: AssemblyProduct("PicRope")]
 [assembly: AssemblyDescription("图绳：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.2.2.0")]
-[assembly: AssemblyFileVersion("1.2.2.0")]
-[assembly: AssemblyInformationalVersion("1.2.2")]
+[assembly: AssemblyVersion("1.2.3.0")]
+[assembly: AssemblyFileVersion("1.2.3.0")]
+[assembly: AssemblyInformationalVersion("1.2.3")]
 
 namespace ScreenLine
 {
@@ -64,6 +64,7 @@ namespace ScreenLine
             Texts = new TextCollection(store);
             Captures = new CapturePipeline(Gallery, Application.Current.Dispatcher, screenshots);
             Shelf = new ShelfWindow(Gallery, Act, EnableClipboard);
+            Shelf.SortingFailed += Notice;
             Shelf.BasketRequested += ShowBasket;
             Shelf.TextRequested += ShowTexts;
             Texts.Changed += Shelf.Update;

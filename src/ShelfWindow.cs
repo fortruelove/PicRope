@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -20,7 +20,7 @@ namespace ScreenLine
 {
     internal enum ShotAction { Copy, Open, Edit, Remove, Trash, Save, Locate, CardEdit, Split, RemoveNote, RemovePicture, CopyText, CopyBoth }
 
-    internal sealed class ShelfWindow : Window
+    internal sealed partial class ShelfWindow : Window
     {
         readonly Gallery gallery;
         readonly Action<ShotAction, CaptureItem> act;
@@ -117,7 +117,7 @@ namespace ScreenLine
             Topmost = true;
             viewport.HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden;
             viewport.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
-            viewport.Content = content;
+            viewport.Content = content; InitializeSorting();
             viewport.Margin = new Thickness(24, 0, 284, 0);
             viewport.RenderTransform = slide;
             viewport.ScrollChanged += delegate(object sender, ScrollChangedEventArgs e)
@@ -288,6 +288,7 @@ namespace ScreenLine
                 if (!cards.TryGetValue(item.Path, out card))
                 {
                     card = new ShotCard(item, act);
+                    card.RopeDrag = DragForSorting;
                     var hovered = card;
                     card.Surface.MouseEnter += delegate { Preview.Enter(hovered); };
                     card.Surface.MouseLeave += delegate { Preview.Leave(hovered); };
@@ -698,7 +699,7 @@ namespace ScreenLine
             }
             else edgeSince = DateTime.MaxValue;
             if (!gallery.Store.State.KeepRopeVisible && WindowsNative.FullScreen(Display, Handle)) { Reveal(false, false, 0); return; }
-            bool busy = cards.Values.Any(c => c.Busy);
+            bool busy = sortingKey != null || cards.Values.Any(c => c.Busy);
             WindowsNative.PassMouse(Handle, !Revealed || (!over && !busy));
             if (!Revealed) return;
             if (!rendering && NeedsRendering) StartRendering();
@@ -755,6 +756,8 @@ namespace ScreenLine
         readonly Action<ShotAction, CaptureItem> act;
         readonly ImageMenu menu;
         internal ImageMenu ActionMenu { get { return menu; } }
+        internal Action<ShotCard, DataObject> RopeDrag;
+        internal void SetSortingHighlight(bool active) { Grip.Effect = active ? new DropShadowEffect { Color = Colors.DodgerBlue, BlurRadius = 18, ShadowDepth = 0, Opacity = 1 } : null; }
         Point start;
         bool pressed, held, dragging, placed, hovering, gripHover;
         double entryTime, breezeDelay = -1, breezeAngle;
@@ -1025,14 +1028,14 @@ namespace ScreenLine
             Surface.Opacity = 0.45;
             Surface.ReleaseMouseCapture();
             if (Item.IsText) {
-                try { DragDrop.DoDragDrop(Surface, new DataObject(DataFormats.UnicodeText, Item.Text.Content), DragDropEffects.Copy); }
+                try { var textPayload = new DataObject(DataFormats.UnicodeText, Item.Text.Content); if (RopeDrag != null) RopeDrag(this, textPayload); else DragDrop.DoDragDrop(Surface, textPayload, DragDropEffects.Copy); }
                 finally { dragging=false; Surface.Opacity=1; }
                 return;
             }
             var payload = new DataObject(DataFormats.FileDrop, new[] { Item.Path });
             if (!string.IsNullOrEmpty(Item.Note)) payload.SetText(Item.Note);
             var preview = new DragPreview(Item.Image.Thumbnail);
-            try { preview.Show(); DragDrop.DoDragDrop(Surface, payload, DragDropEffects.Copy | DragDropEffects.Move); }
+            try { preview.Show(); if (RopeDrag != null) RopeDrag(this, payload); else DragDrop.DoDragDrop(Surface, payload, DragDropEffects.Copy | DragDropEffects.Move); }
             finally { preview.Close(); dragging = false; Surface.Opacity = 1; }
         }
 

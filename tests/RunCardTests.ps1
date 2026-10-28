@@ -7,7 +7,7 @@ $references+=@('Microsoft.Web.WebView2.Core.dll','Microsoft.Web.WebView2.Wpf.dll
 $sources=(Get-ChildItem (Join-Path $root 'src') -Filter '*.cs').FullName
 $resources=@('/resource:'+(Join-Path $root 'src\assets\PicRope.ico')+',PicRope.Icon')
 $resources+=Get-ChildItem (Join-Path $root 'build\runtime-assets') -Filter '*.png' | ForEach-Object { '/resource:'+$_.FullName+',PicRope.'+ $(if($_.BaseName.StartsWith('basket-')){'Basket.'+$_.BaseName.Substring(7)}else{'Envelope.'+$_.BaseName.Substring(9)}) }
-foreach($name in @('CardTests','ClipboardCardTests','CardUiTests','CardIntegrationTests','ClipboardWorkerTests')) {
+foreach($name in @('CardTests','ClipboardCardTests','CardUiTests','RopeSortTests','CardIntegrationTests','ClipboardWorkerTests')) {
   if(!(Test-Path (Join-Path $PSScriptRoot ($name+'.cs')))) {continue}
   $output=Join-Path $root ('build\'+$name+'.exe')
   & (Join-Path $framework 'csc.exe') /nologo /codepage:65001 /platform:x64 /target:exe ('/out:'+$output) ('/main:ScreenLine.Tests.'+$name) $resources $references $sources (Join-Path $PSScriptRoot ($name+'.cs'))

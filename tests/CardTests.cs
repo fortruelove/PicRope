@@ -41,6 +41,16 @@ gallery.SaveCard(new CaptureItem(before),pic,"新备注",null,false);
 Check(gallery.Hanging[index]==pic && gallery.Note(pic)=="新备注" && !texts.Items.Contains(before),"给已有文字配图保持来源卡片位置");
 texts.AutoHang=true;texts.Add("混排倒数第二条");var tail=texts.Add("混排最后一条");
 Check(gallery.Hanging.Last().Text==tail,"新文字按进入顺序加入混排末尾");
+var ordered=gallery.Hanging.Select(i=>i.Path).ToArray();
+Check(!gallery.Reorder(tail==null ? "" : "text:"+tail.Id,0,ordered,false) && gallery.Hanging.Select(i=>i.Path).SequenceEqual(ordered),"绳外放下不改序");
+Check(!gallery.Reorder("text:missing",0,ordered,true),"过期来源不可排序");
+Check(gallery.Reorder("text:"+tail.Id,1,ordered,true) && gallery.Hanging[1].Text==tail,"文字可插入图文混排并保持备注");
+Check(new StateStore(root).State.CardOrder.SequenceEqual(store.State.CardOrder),"混排顺序立即持久化");
+ordered=gallery.Hanging.Select(i=>i.Path).ToArray();
+using(var locked=new FileStream(Path.Combine(root,"state.json"),FileMode.Open,FileAccess.Read,FileShare.None)) {
+bool threw=false;try{gallery.Reorder("text:"+tail.Id,0,ordered,true);}catch(IOException){threw=true;}
+Check(threw && gallery.Hanging.Select(i=>i.Path).SequenceEqual(ordered),"排序保存失败整体回滚");
+}
 Console.WriteLine("卡片测试全部通过");
 }
 }}
