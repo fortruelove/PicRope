@@ -8,6 +8,8 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 namespace ScreenLine.Tests {
 internal static class CardIntegrationTests {
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet=System.Runtime.InteropServices.CharSet.Unicode)] static extern IntPtr FindWindow(string type,string title);
+[System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr window,uint message,IntPtr w,IntPtr l);
 static string root; static int passed;
 static void Check(bool value,string name){if(!value)throw new Exception(name);passed++;Console.WriteLine("通过："+name);}
 [STAThread] public static void Main(){
@@ -43,6 +45,12 @@ combined.Text="保存必须整体回滚";count=c.Gallery.Collected.Count;var fil
 using(var locked=new FileStream(Path.Combine(root,"state.json"),FileMode.Open,FileAccess.Read,FileShare.None)){bool failed=false;try{await c.AcceptCard(combined);}catch(IOException){failed=true;}Check(failed && c.Gallery.Collected.Count==count && Directory.GetFiles(store.Inbox).Length==files,"保存失败不能留下裸图记录或孤立文件");}
 c.Gallery.RemovePicture(original,c.Texts);
 var gallery2=new Gallery(new StateStore(root));using(var pipeline2=new CapturePipeline(gallery2,app.Dispatcher,Path.Combine(root,"missing"))){await pipeline2.Start();Check(!gallery2.Collected.Any(i=>i.Path==original.Path) && File.Exists(original.Path),"仅移除图片后重启不复活，原文件仍保留");}
+var deletion=c.Gallery.Collected.First();
+bool confirmation=false;
+var guard=new System.Windows.Threading.DispatcherTimer {Interval=TimeSpan.FromMilliseconds(100)};
+guard.Tick+=delegate{var dialog=FindWindow(null,"删除内容卡片");if(dialog!=IntPtr.Zero){confirmation=true;SendMessage(dialog,0x0111,new IntPtr(7),IntPtr.Zero);}};
+guard.Start();try{c.Act(ShotAction.Trash,deletion);}finally{guard.Stop();}
+Check(!confirmation && !File.Exists(deletion.Path) && !c.Gallery.Collected.Contains(deletion) && !new StateStore(root).State.ImageNotes.ContainsKey(deletion.Path),"图文组合删除不弹确认框，图片进回收站并清除备注");
 Console.WriteLine("卡片集成测试："+passed+" 通过，0 失败");
 }catch(Exception error){Console.WriteLine("失败："+error);Environment.ExitCode=1;}finally{if(c!=null)c.Dispose();app.Shutdown(Environment.ExitCode);}};
 app.Run();

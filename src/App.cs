@@ -486,7 +486,6 @@ namespace ScreenLine
                         Gallery.Remove(item);
                         break;
                     case ShotAction.Trash:
-                        if(!string.IsNullOrEmpty(Gallery.Note(item)) && MessageBox.Show(Shelf,"将一起删除图片和备注，图片会移到回收站。是否继续？","删除内容卡片",MessageBoxButton.YesNo)!=MessageBoxResult.Yes)return;
                         FileSystem.DeleteFile(item.Path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
                         Shelf.ShowDiscard(item);
                         Gallery.Remove(item);
