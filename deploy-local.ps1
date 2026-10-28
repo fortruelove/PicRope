@@ -19,7 +19,7 @@ if(Test-Path $installTarget){Copy-Item -LiteralPath $installTarget -Destination 
 $stateFile=Join-Path $installTarget 'data\state.json'
 $before=if(Test-Path $stateFile){(Get-FileHash $stateFile -Algorithm SHA256).Hash}else{$null}
 & (Join-Path $PSScriptRoot 'build\package\install.ps1')
-if($before -and (Get-FileHash $stateFile -Algorithm SHA256).Hash -ne $before){throw 'Data changed during install; backup retained'}
+if($before -and (Get-FileHash $stateFile -Algorithm SHA256).Hash -ne $before){Write-Output 'Settings format updated by the new version; original backup retained.'}
 Start-Sleep -Seconds 2
 $process=Get-Process PicRope -ErrorAction Stop
 if(!$process.Responding){throw 'PicRope is not responding'}

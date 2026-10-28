@@ -54,7 +54,7 @@ namespace ScreenLine.Tests
                 window.DeleteSelectedButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Check(!texts.Items.Contains(first) && !gallery.Hanging.Any(i => i.Text == first), "文字批量删除一次点击完成并同步卡片"); window.Close();
                 Check(AppUpdates.Repository == "https://github.com/fortruelove/PicRope" && AppUpdates.Endpoint == "https://api.github.com/repos/fortruelove/PicRope/releases/latest", "更新检查和下载白名单使用自己的仓库");
-                Check(AppUpdates.CurrentVersion == "1.2.3", "发布版本为 1.2.3");
+                Check(AppUpdates.CurrentVersion == "1.2.4", "发布版本为 1.2.4");
                 Console.WriteLine("绳子排序测试：{0} 通过，0 失败", count);
             }
             catch (Exception error) { Console.WriteLine(error); Environment.ExitCode = 1; }

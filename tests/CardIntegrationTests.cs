@@ -23,7 +23,9 @@ c.TrayMenu.PinRope.IsChecked=true;c.Shelf.Reveal(false,false,0);
 Check(c.Shelf.Revealed && new StateStore(root).State.KeepRopeVisible,"置顶后立即展示，阻止收起并记住设置");
 c.Shelf.Capturing=true;c.Shelf.Reveal(false,false,0);Check(!c.Shelf.Revealed,"截图时临时隐藏置顶绳子");c.Shelf.Capturing=false;c.Shelf.Reveal(true,false,0);
 c.TrayMenu.PinRope.IsChecked=false;c.Shelf.Reveal(false,false,0);Check(!c.Shelf.Revealed && !new StateStore(root).State.KeepRopeVisible,"取消置顶后允许恢复收起");c.Shelf.Reveal(true,true,0);
-c.TrayMenu.Pictures.IsChecked=true;Check(store.State.AutoClipboard && new StateStore(root).State.AutoClipboard,"统一自动获取开关持久保存");c.TrayMenu.Pictures.IsChecked=false;
+c.TrayMenu.Pictures.IsChecked=true;Check(store.State.CollectClipboard && !store.State.CollectTextClipboard && c.TrayMenu.Text.Visibility==Visibility.Visible,"图片和文字自动获取开关独立显示");
+c.TrayMenu.Text.IsChecked=true;c.TrayMenu.Pictures.IsChecked=false;Check(!store.State.CollectClipboard && new StateStore(root).State.CollectTextClipboard,"仅文字开关持久保存，不打开图片获取");c.TrayMenu.Text.IsChecked=false;
+Check(c.Shelf.BasketButton.RenderSize.Width*c.Shelf.BasketButton.LayoutTransform.Value.M11<=72.1 && c.Shelf.TextButton.RenderSize.Width*c.Shelf.TextButton.LayoutTransform.Value.M11<=48.1,"信封与篮子连同点击范围缩小一半");
 await c.AcceptCard(new ClipboardCard {Text="可以挂绳的文字\n保留完整换行与缩进"});
 Check(c.Texts.Items.Count==1 && c.Gallery.Hanging.Count==1 && c.Shelf.CardFor("text:"+c.Texts.Items[0].Id)!=null,"文字进入信封并显示在绳子");
 var pixels=new byte[240*140*4];for(int i=0;i<pixels.Length;i+=4){pixels[i]=170;pixels[i+1]=110;pixels[i+2]=40;pixels[i+3]=255;}

@@ -95,8 +95,8 @@ namespace ScreenLine
             var entries = Pair(BasketButton, TextButton); entries.Margin = new Thickness(0, 5, 0, 2); panel.Children.Add(entries);
             panel.Children.Add(Divider());
             panel.Children.Add(new TextBlock { Text = "剪贴板收集", FontSize = 11, Foreground = LightTheme.Brush("#65717F"), Margin = new Thickness(12, 5, 0, 3) });
-            Pictures = Toggle("自动获取剪贴板", "picture", "自动收集图片和文字，按各自设置挂上绳子"); Text = Toggle("文字", "text", "收集剪贴板文字");
-            panel.Children.Add(Pictures);
+            Pictures = Toggle("图片", "picture", "自动获取剪贴板图片"); Text = Toggle("文字", "text", "自动获取剪贴板文字");
+            panel.Children.Add(Pair(Pictures, Text));
             AutoHang = Toggle("新图片自动上绳", "show", "新图片自动上绳"); panel.Children.Add(AutoHang);
             panel.Children.Add(Divider());
             MoreButton = Action("更多操作", "more");

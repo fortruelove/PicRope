@@ -29,6 +29,8 @@ Check(gallery.Note(pic)=="原备注\n不自动上绳" && texts.Items.Count==1,"�
 gallery.RemovePicture(pic,texts); Check(!gallery.Collected.Contains(pic) && File.Exists(path) && texts.Items.Any(t=>t.Content.Contains("原备注")),"仅移除图片保留原文件和备注");
 var old=Path.Combine(root,"old"); Directory.CreateDirectory(old); File.WriteAllText(Path.Combine(old,"state.json"),"{\"Texts\":[{\"Id\":\"old\",\"Content\":\"旧文字\"}],\"Images\":[],\"Collection\":[]}");
 var legacy=new StateStore(old); Check(legacy.State.AutoTextHang && !legacy.State.Texts[0].Hanging && !legacy.State.AutoClipboard,"旧记录不意外挂绳或开启自动获取");
+var migration=Path.Combine(root,"old-switch");Directory.CreateDirectory(migration);File.WriteAllText(Path.Combine(migration,"state.json"),"{\"AutoClipboard\":true}");
+var migrated=new StateStore(migration);Check(migrated.State.CollectClipboard && migrated.State.CollectTextClipboard,"旧统一开关开启时迁移为两类均开启");
 gallery.Collect(path,ImageContent.Read(path));pic=gallery.Collected[0];gallery.SetNote(pic,"原文");
 var before=texts.Add("待合并"); var originalCount=texts.Items.Count;
 using(var locked=new FileStream(Path.Combine(root,"state.json"),FileMode.Open,FileAccess.Read,FileShare.None)) {

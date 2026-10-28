@@ -18,9 +18,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("PicRope · 图绳")]
 [assembly: AssemblyProduct("PicRope")]
 [assembly: AssemblyDescription("图绳：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.2.3.0")]
-[assembly: AssemblyFileVersion("1.2.3.0")]
-[assembly: AssemblyInformationalVersion("1.2.3")]
+[assembly: AssemblyVersion("1.2.4.0")]
+[assembly: AssemblyFileVersion("1.2.4.0")]
+[assembly: AssemblyInformationalVersion("1.2.4")]
 
 namespace ScreenLine
 {
@@ -59,7 +59,6 @@ namespace ScreenLine
         public DesktopController(StateStore store, string screenshots, bool automaticUpdates = true)
         {
             this.automaticUpdates = automaticUpdates;
-            store.State.CollectClipboard=store.State.AutoClipboard; store.State.CollectTextClipboard=store.State.AutoClipboard;
             Gallery = new Gallery(store);
             Texts = new TextCollection(store);
             Captures = new CapturePipeline(Gallery, Application.Current.Dispatcher, screenshots);
@@ -101,8 +100,8 @@ namespace ScreenLine
             Gallery.Changed += SyncAutoHang;
             collect = TrayMenu.Pictures;
             collectText = TrayMenu.Text;
-            TrayMenu.OnToggle(collect, store.State.AutoClipboard, SetAutomaticClipboard);
-            collectText.Visibility = Visibility.Collapsed;
+            TrayMenu.OnToggle(collect, store.State.CollectClipboard, delegate(bool value){SetAutomaticClipboard(true,value);});
+            TrayMenu.OnToggle(collectText, store.State.CollectTextClipboard, delegate(bool value){SetAutomaticClipboard(false,value);});
             TrayMenu.OnAction(TrayMenu.AppearanceButton, ShowAppearance);
             var more = TrayMenu.MoreMenu;
             MenuItem previewToggle = null;
@@ -277,11 +276,12 @@ namespace ScreenLine
             SyncScreens();
         }
 
-        void SetAutomaticClipboard(bool value)
+        void SetAutomaticClipboard(bool picture, bool value)
         {
             var state=Gallery.Store.State;
             bool old=state.AutoClipboard, pictures=state.CollectClipboard, text=state.CollectTextClipboard;
-            state.AutoClipboard=value; state.CollectClipboard=value; state.CollectTextClipboard=value;
+            if(picture)state.CollectClipboard=value;else state.CollectTextClipboard=value;
+            state.AutoClipboard=state.CollectClipboard || state.CollectTextClipboard;
             try { Gallery.Store.Save(); }
             catch { state.AutoClipboard=old; state.CollectClipboard=pictures; state.CollectTextClipboard=text; throw; }
             textClipboardVersion++; textClipboardSequence=WindowsNative.GetClipboardSequenceNumber();
@@ -290,12 +290,13 @@ namespace ScreenLine
         async void CollectClipboardText()
         {
             uint sequence=WindowsNative.GetClipboardSequenceNumber();
-            if(disposed || !Gallery.Store.State.AutoClipboard || sequence==textClipboardSequence) return;
+            if(disposed || !(Gallery.Store.State.CollectClipboard || Gallery.Store.State.CollectTextClipboard) || sequence==textClipboardSequence) return;
             textClipboardSequence=sequence; int version=textClipboardVersion;
             try {
-                var card=await CardClipboard.Read(sequence,false);
-                if(disposed || !Gallery.Store.State.AutoClipboard || version!=textClipboardVersion || sequence!=WindowsNative.GetClipboardSequenceNumber()) return;
-                await AcceptCard(card, delegate { return !disposed && Gallery.Store.State.AutoClipboard && version == textClipboardVersion && sequence == WindowsNative.GetClipboardSequenceNumber(); });
+                var card=await CardClipboard.Read(sequence,false,Gallery.Store.State.CollectClipboard,Gallery.Store.State.CollectTextClipboard);
+                if(disposed || version!=textClipboardVersion || sequence!=WindowsNative.GetClipboardSequenceNumber()) return;
+                card=CardClipboard.ForAutomatic(card,Gallery.Store.State.CollectClipboard,Gallery.Store.State.CollectTextClipboard);
+                await AcceptCard(card, delegate { return !disposed && version == textClipboardVersion && sequence == WindowsNative.GetClipboardSequenceNumber(); });
             } catch(Exception error) {if(!disposed)Gallery.Store.Log(error);}
         }
         internal async Task AcceptCard(ClipboardCard card, Func<bool> stillCurrent = null)

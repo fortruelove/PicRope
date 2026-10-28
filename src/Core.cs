@@ -18,6 +18,7 @@ namespace ScreenLine
         public bool CollectClipboard { get; set; }
         public bool CollectTextClipboard { get; set; }
         public bool AutoClipboard { get; set; }
+        public int ClipboardOptionsVersion { get; set; }
         public bool KeepRopeVisible { get; set; }
         public bool AutoTextHang { get; set; }
         public Dictionary<string, string> ImageNotes { get; set; }
@@ -52,7 +53,7 @@ namespace ScreenLine
             Inbox = Path.Combine(Root, "Captures");
             file = Path.Combine(Root, "state.json");
             State = new SavedState();
-            if (!File.Exists(file)) return;
+            if (!File.Exists(file)) {State.ClipboardOptionsVersion=1;return;}
             try
             {
                 State = serializer.Deserialize<SavedState>(File.ReadAllText(file, Encoding.UTF8)) ?? new SavedState();
@@ -62,6 +63,10 @@ namespace ScreenLine
                 State.ImageNotes = new Dictionary<string, string>(State.ImageNotes ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
                 if (State.CardOrder == null) State.CardOrder = new List<string>();
                 if (State.DetachedPictures == null) State.DetachedPictures = new List<string>();
+                if(State.ClipboardOptionsVersion==0) {
+                    if(State.AutoClipboard) {State.CollectClipboard=true;State.CollectTextClipboard=true;}
+                    State.ClipboardOptionsVersion=1;
+                }
             }
             catch (ArgumentException ex) { Log(ex); }
             catch (InvalidOperationException ex) { Log(ex); }

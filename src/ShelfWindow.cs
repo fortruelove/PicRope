@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -78,7 +78,7 @@ namespace ScreenLine
         internal bool ChoosingBasket { get; set; }
         internal bool ChoosingTexts { get; set; }
         internal bool Capturing { get; set; }
-        double AccessoryWidth { get { return 260; } }
+        double AccessoryWidth { get { return 130; } }
         double PhotoWidth { get { return Math.Max(1, (ActualWidth > 0 ? ActualWidth : Width) - 48 - AccessoryWidth); } }
         double LineWidth { get { return PhotoWidth + AccessoryWidth; } }
         double ScrollLimit { get { return Math.Max(0, content.Width - PhotoWidth); } }
@@ -151,7 +151,7 @@ namespace ScreenLine
             Appearance = LineTheme.FromId(gallery.Store.State.Theme);
             RopeLine.Apply(rope, Appearance);
 
-            var basket = basketHolder = new Canvas { Width = 156, Height = 220, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 24, 0), RenderTransform = slide };
+            var basket = basketHolder = new Canvas { Width = 78, Height = 220, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 24, 0), RenderTransform = slide };
             var basketBody = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
             basketImage.Source = PictureBasket.Source(Appearance);
             RenderOptions.SetBitmapScalingMode(basketImage, BitmapScalingMode.HighQuality);
@@ -165,6 +165,7 @@ namespace ScreenLine
             basketBody.Children.Add(new Border { Child = basketCount, Background = LightTheme.Brush("#D920242C"),
                 BorderBrush = LightTheme.Brush("#40FFFFFF"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(6),
                 Padding = new Thickness(6, 1, 6, 2), MinWidth = 26, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) });
+            BasketButton.LayoutTransform = new ScaleTransform(0.5, 0.5);
             BasketButton.Content = basketBody; BasketButton.Width = 144; BasketButton.Height = 154; BasketButton.Focusable = false; BasketButton.Cursor = Cursors.Hand;
             BasketButton.ToolTip = "打开图片篮子";
             BasketButton.Template = (ControlTemplate)System.Windows.Markup.XamlReader.Parse("<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Button'><Border Background='#02FFFFFF'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Top'/></Border></ControlTemplate>");
@@ -172,10 +173,10 @@ namespace ScreenLine
             BasketButton.MouseEnter += delegate { basketMotion.Target = 1.3; StartRendering(); };
             BasketButton.MouseLeave += delegate { basketMotion.Target = 0; };
             System.Windows.Automation.AutomationProperties.SetName(BasketButton, "打开图片篮子");
-            basket.Children.Add(BasketButton); Canvas.SetLeft(BasketButton, 6); Canvas.SetTop(BasketButton, 20);
+            basket.Children.Add(BasketButton); Canvas.SetLeft(BasketButton, 3); Canvas.SetTop(BasketButton, 20);
             root.Children.Add(basket);
 
-            textHolder = new Canvas { Width = 112, Height = 220, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 166, 0), RenderTransform = slide };
+            textHolder = new Canvas { Width = 56, Height = 220, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 95, 0), RenderTransform = slide };
             var textBody = new Grid { Width = 96, Height = 154 };
             envelopeImage.Apply(Appearance);
             envelopeImage.HorizontalAlignment = HorizontalAlignment.Center; envelopeImage.VerticalAlignment = VerticalAlignment.Top;
@@ -188,13 +189,14 @@ namespace ScreenLine
             textCounter.Padding = new Thickness(6, 1, 6, 2); textCounter.MinWidth = 26;
             textCounter.HorizontalAlignment = HorizontalAlignment.Center; textCounter.VerticalAlignment = VerticalAlignment.Top;
             textBody.Children.Add(textCounter);
+            TextButton.LayoutTransform = new ScaleTransform(0.5, 0.5);
             TextButton.Content = textBody; TextButton.Width = 96; TextButton.Height = 154; TextButton.Focusable = false; TextButton.Cursor = Cursors.Hand;
             TextButton.Template = BasketButton.Template; TextButton.ToolTip = "打开文字";
             TextButton.MouseEnter += delegate { envelopeImage.Expand(true); StartRendering(); };
             TextButton.MouseLeave += delegate { envelopeImage.Expand(false); };
             AutomationProperties.SetName(TextButton, "打开文字");
             TextButton.Click += delegate { if (TextRequested != null) TextRequested(); };
-            textHolder.Children.Add(TextButton); Canvas.SetLeft(TextButton, 8);
+            textHolder.Children.Add(TextButton); Canvas.SetLeft(TextButton, 4);
             root.Children.Add(textHolder); UpdateTexts();
 
             SourceInitialized += delegate
@@ -357,14 +359,14 @@ namespace ScreenLine
             geometry.Figures.Add(shape);
             rope.Data = geometry;
             Point hook = PictureBasket.Hook(Appearance);
-            double fraction = (LineWidth - 156 + 22 + hook.X) / LineWidth;
+            double fraction = (LineWidth - 78 + 11 + hook.X * 0.5) / LineWidth;
             double offset = 4 * drawnSag * fraction * (1 - fraction);
-            double basketTop = 18 + offset - hook.Y;
+            double basketTop = 18 + offset - hook.Y * 0.5;
             Canvas.SetTop(BasketButton, basketTop);
-            double textFraction = (PhotoWidth + 62) / LineWidth;
-            double textTop = 18 + 4 * drawnSag * textFraction * (1 - textFraction) - 7;
+            double textFraction = (PhotoWidth + 31) / LineWidth;
+            double textTop = 18 + 4 * drawnSag * textFraction * (1 - textFraction) - 3.5;
             Canvas.SetTop(TextButton, textTop);
-            double countTop = basketTop + basketImage.Height + 6 - textTop;
+            double countTop = (basketTop + (basketImage.Height + 6) * 0.5 - textTop) * 2;
             textCounter.Margin = new Thickness(0, countTop, 0, 0);
             envelopeImage.Height = Math.Max(24, Math.Min(86, countTop - 26));
         }
@@ -382,7 +384,7 @@ namespace ScreenLine
             bool pictures = true, texts = true;
             BasketButton.Visibility = basketHolder.Visibility = pictures ? Visibility.Visible : Visibility.Collapsed;
             TextButton.Visibility = textHolder.Visibility = texts ? Visibility.Visible : Visibility.Collapsed;
-            textHolder.Margin = new Thickness(0, 0, pictures ? 166 : 24, 0);
+            textHolder.Margin = new Thickness(0, 0, pictures ? 95 : 24, 0);
             viewport.Margin = new Thickness(24, 0, 24 + AccessoryWidth, 0);
             if (!pictures) { basketMotion.Snap(0); basketCounterMotion.Snap(1); }
             if (!texts) envelopeImage.Reset();
