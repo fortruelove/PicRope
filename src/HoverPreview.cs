@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
@@ -46,7 +46,7 @@ namespace ScreenLine
 
         public void Enter(ShotCard card)
         {
-            if (disposed || !enabled || !shelf.Revealed || card.Busy || card.Detached || card.Flying || card.Releasing) return;
+            if (card.Item.IsText || disposed || !enabled || !shelf.Revealed || card.Busy || card.Detached || card.Flying || card.Releasing) return;
             bool quick = Visible || (DateTime.UtcNow - lastShown).TotalMilliseconds < 1000;
             if (target == card && (Visible || delay.IsEnabled)) { leave.Stop(); return; }
             delay.Stop(); leave.Stop(); revision++; pending = null;

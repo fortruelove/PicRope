@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Automation;
@@ -48,6 +48,12 @@ namespace ScreenLine
             panel.Children.Add(Action("编辑", "edit", ShotAction.Edit, execute));
             panel.Children.Add(Action("保存副本…", "save", ShotAction.Save, execute));
             panel.Children.Add(Action("打开位置", "folder", ShotAction.Locate, execute));
+            panel.Children.Add(Action("关联 / 编辑图文…", "edit", ShotAction.CardEdit, execute));
+            panel.Children.Add(Action("复制文字", "copy", ShotAction.CopyText, execute));
+            panel.Children.Add(Action("复制图片和文字", "copy", ShotAction.CopyBoth, execute));
+            panel.Children.Add(Action("拆分为图片和文字", "folder", ShotAction.Split, execute));
+            panel.Children.Add(Action("仅移除备注", "trash", ShotAction.RemoveNote, execute));
+            panel.Children.Add(Action("仅移除图片（保留原文件）", "trash", ShotAction.RemovePicture, execute));
             panel.Children.Add(new Border { Height = 1, Background = LightTheme.Brush("#E8EBEF"), Margin = new Thickness(6, 4, 6, 4) });
             panel.Children.Add(Action("取下放篮子", "folder", ShotAction.Remove, execute));
             panel.Children.Add(Action("移到回收站", "trash", ShotAction.Trash, execute));
@@ -75,6 +81,18 @@ namespace ScreenLine
             Opened += delegate { Focus(); };
         }
 
+        internal void SetCard(bool text, bool note) {
+            SetLabel(ShotAction.Remove, text ? "取下放信封" : "取下放篮子");
+            SetLabel(ShotAction.Trash, text ? "删除文字" : note ? "删除图片和备注" : "移到回收站");
+            SetLabel(ShotAction.Edit, text ? "编辑文字 / 添加配图…" : "编辑图片");
+            foreach (var action in new[] { ShotAction.Save, ShotAction.Locate, ShotAction.CopyBoth, ShotAction.Split, ShotAction.RemoveNote, ShotAction.RemovePicture })
+                Actions[action].Visibility = text || (!note && action != ShotAction.Save && action != ShotAction.Locate) ? Visibility.Collapsed : Visibility.Visible;
+            Actions[ShotAction.CopyText].Visibility = text || note ? Visibility.Visible : Visibility.Collapsed;
+        }
+        void SetLabel(ShotAction action, string value) {
+            var button=Actions[action]; var panel=(StackPanel)button.Content;
+            ((TextBlock)panel.Children[1]).Text=value; AutomationProperties.SetName(button,value);
+        }
         internal void SetDetails(string value) { details.Text = value; }
 
         Button Action(string title, string icon, ShotAction action, Action<ShotAction> execute)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -17,6 +17,12 @@ namespace ScreenLine
     {
         public bool CollectClipboard { get; set; }
         public bool CollectTextClipboard { get; set; }
+        public bool AutoClipboard { get; set; }
+        public bool KeepRopeVisible { get; set; }
+        public bool AutoTextHang { get; set; }
+        public Dictionary<string, string> ImageNotes { get; set; }
+        public List<string> CardOrder { get; set; }
+        public List<string> DetachedPictures { get; set; }
         public bool AutoHang { get; set; }
         public bool HoverPreview { get; set; }
         public string Theme { get; set; }
@@ -28,7 +34,7 @@ namespace ScreenLine
         public List<string> Collection { get; set; }
         public List<TextItem> Texts { get; set; }
 
-        public SavedState() { Images = new List<string>(); Collection = new List<string>(); Texts = new List<TextItem>(); Theme = "classic"; AutoHang = true; HoverPreview = true; CaptureModifiers = 3; CaptureKey = (uint)'S'; }
+        public SavedState() { Images = new List<string>(); Collection = new List<string>(); Texts = new List<TextItem>(); ImageNotes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); CardOrder = new List<string>(); DetachedPictures = new List<string>(); AutoTextHang = true; Theme = "classic"; AutoHang = true; HoverPreview = true; CaptureModifiers = 3; CaptureKey = (uint)'S'; }
     }
 
     internal sealed class StateStore
@@ -53,6 +59,9 @@ namespace ScreenLine
                 if (State.Images == null) State.Images = new List<string>();
                 if (State.Collection == null) State.Collection = new List<string>();
                 if (State.Texts == null) State.Texts = new List<TextItem>();
+                State.ImageNotes = new Dictionary<string, string>(State.ImageNotes ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
+                if (State.CardOrder == null) State.CardOrder = new List<string>();
+                if (State.DetachedPictures == null) State.DetachedPictures = new List<string>();
             }
             catch (ArgumentException ex) { Log(ex); }
             catch (InvalidOperationException ex) { Log(ex); }
@@ -79,6 +88,7 @@ namespace ScreenLine
         public string Id { get; set; }
         public string Content { get; set; }
         public DateTime CreatedUtc { get; set; }
+        public bool Hanging { get; set; }
         bool marked;
         [System.Web.Script.Serialization.ScriptIgnore]
         public bool IsMarked
@@ -96,6 +106,18 @@ namespace ScreenLine
         public event Action Changed;
 
         public TextCollection(StateStore store) { Store = store; }
+
+        public bool AutoHang { get { return Store.State.AutoTextHang; } set { bool old = AutoHang; Store.State.AutoTextHang = value; try { Store.Save(); } catch { Store.State.AutoTextHang = old; throw; } Notify(); } }
+        public void Notify() { if (Changed != null) Changed(); }
+        public void SetHanging(IEnumerable<TextItem> selection, bool hanging)
+        {
+            var items = selection.Where(Items.Contains).ToArray(); var old = items.Select(t => t.Hanging).ToArray();
+            var order=Store.State.CardOrder.ToList();
+            foreach (var item in items) item.Hanging = hanging;
+            foreach(var item in items) {string key="text:"+item.Id; if(hanging && !Store.State.CardOrder.Contains(key))Store.State.CardOrder.Add(key);}
+            try { Store.Save(); } catch { Store.State.CardOrder=order;for (int i=0;i<items.Length;i++) items[i].Hanging=old[i]; throw; }
+            Notify();
+        }
 
         public bool CollectClipboard
         {
@@ -116,10 +138,13 @@ namespace ScreenLine
             if (string.IsNullOrWhiteSpace(content)) return null;
             var existing = Items.Find(item => item.Content == content);
             if (existing != null) return existing;
-            var added = new TextItem { Id = Guid.NewGuid().ToString("N"), Content = content, CreatedUtc = DateTime.UtcNow };
+            var added = new TextItem { Id = Guid.NewGuid().ToString("N"), Content = content, CreatedUtc = DateTime.UtcNow, Hanging = AutoHang };
+            var order=Store.State.CardOrder.ToList();
+            if(Store.State.CardOrder.Count==0) {Store.State.CardOrder.AddRange(Store.State.Images);Store.State.CardOrder.AddRange(Items.Where(t=>t.Hanging).Reverse().Select(t=>"text:"+t.Id));}
+            if(added.Hanging)Store.State.CardOrder.Add("text:"+added.Id);
             Items.Insert(0, added);
             try { Store.Save(); }
-            catch { Items.Remove(added); throw; }
+            catch { Items.Remove(added); Store.State.CardOrder=order; throw; }
             if (Changed != null) Changed();
             return added;
         }
@@ -476,6 +501,12 @@ namespace ScreenLine
         public readonly string Path;
         public ImageContent Image;
         public DateTime Written;
+        public TextItem Text;
+        public string Note = "";
+        public bool IsText { get { return Text != null; } }
+        public string Label { get { return IsText ? Text.Content : System.IO.Path.GetFileName(Path) + (string.IsNullOrEmpty(Note) ? "" : " · " + Note.Replace("\n", " ")); } }
+
+        public CaptureItem(TextItem text) { Text = text; Path = "text:" + text.Id; Written = text.CreatedUtc; }
 
         public CaptureItem(string path, ImageContent image)
         {
@@ -493,6 +524,130 @@ namespace ScreenLine
         public event Action Changed;
 
         public Gallery(StateStore store) { Store = store; }
+
+        readonly Dictionary<string, CaptureItem> textCards = new Dictionary<string, CaptureItem>();
+        public List<CaptureItem> Hanging
+        {
+            get
+            {
+                var result = Items.ToList();
+                foreach (var text in Store.State.Texts.Where(t => t.Hanging))
+                {
+                    CaptureItem card;
+                    if (!textCards.TryGetValue(text.Id, out card) || card.Text != text) textCards[text.Id] = card = new CaptureItem(text);
+                    result.Add(card);
+                }
+                foreach (var id in textCards.Keys.Where(id => !Store.State.Texts.Any(t => t.Id == id)).ToArray()) textCards.Remove(id);
+                foreach (var item in result.Where(i => !i.IsText)) item.Note = Note(item);
+                var order = Store.State.CardOrder;
+                return result.OrderBy(i => { int n=order.IndexOf(i.Path); return n < 0 ? int.MaxValue : n; }).ToList();
+            }
+        }
+        public string Note(CaptureItem item) { string note; return Store.State.ImageNotes.TryGetValue(item.Path, out note) ? note : ""; }
+        public bool Reorder(string source, int insertion, IEnumerable<string> visible, bool onRope)
+        {
+            if (!onRope) return false;
+            var all = Hanging.Select(i => i.Path).ToList();
+            var valid = new HashSet<string>(all, StringComparer.OrdinalIgnoreCase);
+            var keys = visible.Where(valid.Contains).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            int from = keys.FindIndex(key => string.Equals(key, source, StringComparison.OrdinalIgnoreCase));
+            if (from < 0) return false;
+            insertion = Math.Max(0, Math.Min(keys.Count, insertion));
+            keys.RemoveAt(from);
+            if (from < insertion) insertion--;
+            keys.Insert(insertion, source);
+            var shown = new HashSet<string>(keys, StringComparer.OrdinalIgnoreCase);
+            int next = 0;
+            var reordered = all.Select(key => shown.Contains(key) ? keys[next++] : key).ToList();
+            // Keep not-yet-restored images and temporarily unmounted cards in the persisted order.
+            var saved = Store.State.CardOrder;
+            ChangeCards(delegate { Store.State.CardOrder = reordered.Concat(saved).Distinct(StringComparer.OrdinalIgnoreCase).ToList(); });
+            return true;
+        }
+        public void SetNote(CaptureItem item, string note)
+        {
+            if (!Collected.Contains(item)) return;
+            ChangeCards(delegate { if (string.IsNullOrEmpty(note)) Store.State.ImageNotes.Remove(item.Path); else Store.State.ImageNotes[item.Path] = note; });
+        }
+        // Related records are changed in one state-file write; failed writes restore all relationships.
+        void ChangeCards(Action change)
+        {
+            var notes = new Dictionary<string,string>(Store.State.ImageNotes, StringComparer.OrdinalIgnoreCase);
+            var texts = Store.State.Texts.ToList(); var hanging = texts.Select(t=>t.Hanging).ToArray(); var contents=texts.Select(t=>t.Content).ToArray();
+            var images=Items.ToList(); var collected=Collected.ToList(); var order=Store.State.CardOrder.ToList(); var detached=Store.State.DetachedPictures.ToList();
+            try { change(); Save(); }
+            catch { Store.State.ImageNotes=notes; Store.State.Texts=texts; for(int i=0;i<texts.Count;i++) {texts[i].Hanging=hanging[i];texts[i].Content=contents[i];} Items.Clear(); Items.AddRange(images); Collected.Clear(); Collected.AddRange(collected); Store.State.CardOrder=order; Store.State.DetachedPictures=detached; Store.State.Images=images.Select(i=>i.Path).ToList(); Store.State.Collection=collected.Select(i=>i.Path).ToList(); throw; }
+            foreach(var item in Collected) item.Note=Note(item);
+            Notify();
+        }
+        public void AttachText(CaptureItem picture, TextItem text, bool keepTextPosition, bool append)
+        {
+            if (!Collected.Contains(picture) || !Store.State.Texts.Contains(text)) return;
+            ChangeCards(delegate {
+                var order=Hanging.Select(i=>i.Path).ToList(); string key="text:"+text.Id;
+                if (keepTextPosition) {
+                    Items.Remove(picture); if(text.Hanging) Items.Add(picture);
+                    order.Remove(picture.Path); int n=order.IndexOf(key); if(n>=0) order[n]=picture.Path;
+                }
+                else order.Remove(key);
+                Store.State.CardOrder=order;
+                string old=Note(picture); Store.State.ImageNotes[picture.Path]=append && old.Length>0 ? old+"\n"+text.Content : text.Content;
+                Store.State.Texts.Remove(text);
+            });
+        }
+        public void Split(CaptureItem picture, TextCollection texts)
+        {
+            string note=Note(picture); if(string.IsNullOrEmpty(note)) return;
+            ChangeCards(delegate {
+                var order=Hanging.Select(i=>i.Path).ToList();
+                var text=new TextItem {Id=Guid.NewGuid().ToString("N"),Content=note,CreatedUtc=DateTime.UtcNow,Hanging=Items.Contains(picture)};
+                Store.State.Texts.Insert(0,text); Store.State.ImageNotes.Remove(picture.Path);
+                int n=order.IndexOf(picture.Path); if(n>=0) order.Insert(n+1,"text:"+text.Id); Store.State.CardOrder=order;
+            }); texts.Notify();
+        }
+        public void RemovePicture(CaptureItem picture, TextCollection texts)
+        {
+            string note=Note(picture);
+            ChangeCards(delegate {
+                var order=Hanging.Select(i=>i.Path).ToList(); int n=order.IndexOf(picture.Path);
+                if (!string.IsNullOrEmpty(note)) { var text=new TextItem {Id=Guid.NewGuid().ToString("N"),Content=note,CreatedUtc=DateTime.UtcNow,Hanging=Items.Contains(picture)}; Store.State.Texts.Insert(0,text); if(n>=0) order[n]="text:"+text.Id; }
+                else order.Remove(picture.Path);
+                Store.State.ImageNotes.Remove(picture.Path); Items.Remove(picture); Collected.Remove(picture); Store.State.CardOrder=order; Store.State.DetachedPictures.Add(picture.Path);
+            }); texts.Notify();
+        }
+        public void SaveCard(CaptureItem original, CaptureItem picture, string content, TextItem consumed, bool append, bool newPicture = false)
+        {
+            if (original.IsText && !Store.State.Texts.Contains(original.Text)) throw new InvalidOperationException("文字已被移除，请重新打开。");
+            if (picture != null && !Collected.Contains(picture) && !newPicture) throw new InvalidOperationException("配图已被移除，请重新选择。");
+            if (picture == null && original.IsText && string.IsNullOrWhiteSpace(content)) throw new InvalidOperationException("文字不能为空。");
+            ChangeCards(delegate {
+                if (original.IsText && picture == null) { original.Text.Content=content; return; }
+                var target=picture ?? original;
+                bool mounted=original.IsText ? original.Text.Hanging : Items.Contains(original);
+                var order=Hanging.Select(i=>i.Path).ToList();
+                string old=Note(target);
+                Store.State.ImageNotes[target.Path]=append && !string.IsNullOrEmpty(old) ? old+"\n"+content : content;
+                if(original.IsText) Store.State.Texts.Remove(original.Text);
+                else if(target!=original) {Items.Remove(original);Collected.Remove(original);Store.State.ImageNotes.Remove(original.Path);Store.State.DetachedPictures.Add(original.Path);}
+                if(!Collected.Contains(target))Collected.Add(target);
+                if(consumed!=null) Store.State.Texts.Remove(consumed);
+                if(target.Path!=original.Path) {order.Remove(target.Path);int n=order.IndexOf(original.Path);if(n>=0)order[n]=target.Path;}
+                if(consumed!=null)order.Remove("text:"+consumed.Id);
+                Items.Remove(target); if(mounted)Items.Add(target);
+                Store.State.CardOrder=order;
+            });
+        }
+        public CaptureItem ImportCard(string path, ImageContent image, string note, bool hanging)
+        {
+            var item = new CaptureItem(path, image);
+            ChangeCards(delegate {
+                Collected.Add(item); if(hanging){Items.Add(item);if(Items.Count>50)Items.RemoveAt(0);}
+                if(!string.IsNullOrWhiteSpace(note))Store.State.ImageNotes[item.Path]=note;
+                Store.State.DetachedPictures.RemoveAll(p=>string.Equals(p,item.Path,StringComparison.OrdinalIgnoreCase));
+            });
+            return item;
+        }
+        public void HangCard(CaptureItem item) { if(Contains(item.Path))return;ChangeCards(delegate{Items.Add(item);if(Items.Count>50)Items.RemoveAt(0);}); }
 
         public bool Contains(string path) { return Items.Any(i => FileRules.SameFile(i.Path, path)); }
 
@@ -548,6 +703,8 @@ namespace ScreenLine
         {
             Store.State.Images = Items.Select(i => i.Path).ToList();
             Store.State.Collection = Collected.Select(i => i.Path).ToList();
+            foreach(var key in Items.Select(i=>i.Path).Concat(Store.State.Texts.Where(t=>t.Hanging).Reverse().Select(t=>"text:"+t.Id)))
+                if(!Store.State.CardOrder.Contains(key))Store.State.CardOrder.Add(key);
             Store.Save();
         }
     }

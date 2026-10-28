@@ -82,7 +82,7 @@ namespace ScreenLine
             var saved = gallery.Store.State.Images.ToArray();
             var collected = saved.Concat(gallery.Store.State.Collection);
             if (Directory.Exists(gallery.Store.Inbox))
-                collected = collected.Concat(Directory.EnumerateFiles(gallery.Store.Inbox).Where(FileRules.IsImage));
+                collected = collected.Concat(Directory.EnumerateFiles(gallery.Store.Inbox).Where(path => FileRules.IsImage(path) && !gallery.Store.State.DetachedPictures.Contains(path, StringComparer.OrdinalIgnoreCase)));
             // 恢复图片篮子时不触发自动挂图，也不重新计入截图去重记录。
             foreach (string path in collected.Distinct(StringComparer.OrdinalIgnoreCase).ToArray())
             {
@@ -189,8 +189,26 @@ namespace ScreenLine
         {
             if (disposed || gallery.Contains(item.Path)) return;
             if (!File.Exists(item.Path)) { gallery.Prune(); return; }
-            gallery.Add(item.Path, item.Image);
+            gallery.HangCard(item);
             if (Arrived != null) Arrived(item, null);
+        }
+
+        public async Task<CaptureItem> ImportClipboardCard(ClipboardCard card, Func<bool> stillCurrent = null)
+        {
+            if (card == null || card.Picture == null) return null;
+            var image = await Task.Run(() => ImageContent.Decode(card.Picture.Bytes));
+            if (disposed || (stillCurrent != null && !stillCurrent())) return null;
+            var existing = gallery.Collected.FirstOrDefault(i => i.Image.Fingerprint == image.Fingerprint && gallery.Note(i) == (card.Text ?? ""));
+            if (existing != null) { if (AutoHang) Hang(existing); return existing; }
+            Directory.CreateDirectory(gallery.Store.Inbox);
+            string path = Path.Combine(gallery.Store.Inbox, "粘贴_" + Guid.NewGuid().ToString("N") + card.Picture.Extension);
+            await Task.Run(() => File.WriteAllBytes(path, card.Picture.Bytes));
+            if (disposed || (stillCurrent != null && !stillCurrent())) { File.Delete(path); return null; }
+            CaptureItem item;
+            try { item = gallery.ImportCard(path, image, card.Text, AutoHang); }
+            catch { File.Delete(path); throw; }
+            if (AutoHang && Arrived != null) Arrived(item, null);
+            return item;
         }
 
         public async Task<string> AcceptCapture(BitmapSource picture)

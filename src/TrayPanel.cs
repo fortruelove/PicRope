@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Reflection;
 using System.Windows;
@@ -60,7 +60,7 @@ namespace ScreenLine
 </ResourceDictionary>");
 
         internal readonly Button VisibilityButton, BasketButton, TextButton, AppearanceButton, ExitButton, MoreButton, ScreenButton;
-        internal readonly CheckBox Pictures, Text, AutoHang;
+        internal readonly CheckBox Pictures, Text, AutoHang, PinRope;
         internal readonly LightMenu MoreMenu = new LightMenu("更多操作", "");
         internal readonly LightMenu ScreenMenu = new LightMenu("显示屏幕", "") { Width = 320 };
         internal readonly TextBlock ScreenMode = new TextBlock { FontSize = 11, Foreground = LightTheme.Brush("#65717F"), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 22, 0) };
@@ -86,6 +86,7 @@ namespace ScreenLine
 
             VisibilityButton = Action("显示 / 收起", "show"); VisibilityButton.Tag = "primary";
             ((Grid)VisibilityButton.Content).Children.Add(Shortcut); panel.Children.Add(VisibilityButton);
+            PinRope = Toggle("置顶绳子", "show", "展开绳子并始终保持显示"); panel.Children.Add(PinRope);
             ScreenButton = Action("显示屏幕", "monitor"); ScreenButton.Height = 40;
             var screenArrow = Icon("chevron"); screenArrow.Width = 13; screenArrow.Height = 13; screenArrow.HorizontalAlignment = HorizontalAlignment.Right;
             ((Grid)ScreenButton.Content).Children.Add(ScreenMode); ((Grid)ScreenButton.Content).Children.Add(screenArrow);
@@ -94,8 +95,8 @@ namespace ScreenLine
             var entries = Pair(BasketButton, TextButton); entries.Margin = new Thickness(0, 5, 0, 2); panel.Children.Add(entries);
             panel.Children.Add(Divider());
             panel.Children.Add(new TextBlock { Text = "剪贴板收集", FontSize = 11, Foreground = LightTheme.Brush("#65717F"), Margin = new Thickness(12, 5, 0, 3) });
-            Pictures = Toggle("图片", "picture", "收集剪贴板图片"); Text = Toggle("文字", "text", "收集剪贴板文字");
-            panel.Children.Add(Pair(Pictures, Text));
+            Pictures = Toggle("自动获取剪贴板", "picture", "自动收集图片和文字，按各自设置挂上绳子"); Text = Toggle("文字", "text", "收集剪贴板文字");
+            panel.Children.Add(Pictures);
             AutoHang = Toggle("新图片自动上绳", "show", "新图片自动上绳"); panel.Children.Add(AutoHang);
             panel.Children.Add(Divider());
             MoreButton = Action("更多操作", "more");

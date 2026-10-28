@@ -7,17 +7,17 @@
 <p align="center">Windows 截图暂存与桌面贴图工具</p>
 
 <p align="center">
-  <a href="https://github.com/Renly1994/PicRope/releases/latest"><img src="https://img.shields.io/github/v/release/Renly1994/PicRope?style=flat-square&amp;label=release&amp;color=2563eb" alt="最新版本"></a>
+  <a href="https://github.com/fortruelove/PicRope/releases/latest"><img src="https://img.shields.io/github/v/release/fortruelove/PicRope?style=flat-square&amp;label=release&amp;color=2563eb" alt="最新版本"></a>
   <img src="https://img.shields.io/badge/Windows-10%20%2F%2011-0078d4?style=flat-square" alt="Windows 10 和 11">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-475569?style=flat-square" alt="MIT 许可"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/Renly1994/PicRope/releases/latest"><strong>下载 Windows 版</strong></a>
+  <a href="https://github.com/fortruelove/PicRope/releases/latest"><strong>下载 Windows 版</strong></a>
   · <a href="#功能">功能</a>
   · <a href="#开始使用">开始使用</a>
   · <a href="#常见问题">常见问题</a>
-  · <a href="https://github.com/Renly1994/PicRope/issues">反馈</a>
+  · <a href="https://github.com/fortruelove/PicRope/issues">反馈</a>
 </p>
 
 ![图绳界面拼图：屏幕上沿的截图绳、文字信封、图片篮子与桌面贴图，图片内容为示例](docs/assets/overview-windows.png)
@@ -37,7 +37,7 @@ PicRope 将截图暂存在屏幕上沿，单击复制、拖拽取用，也可以
 
 ## 开始使用
 
-1. 从 [Releases 下载最新版](https://github.com/Renly1994/PicRope/releases/latest)，完整解压后运行 `Install.cmd`。
+1. 从 [Releases 下载最新版](https://github.com/fortruelove/PicRope/releases/latest)，完整解压后运行 `Install.cmd`。
 2. 启动图绳，用 `Win+PrtScn` 截图。保存到 Windows 截图文件夹的新图片会自动挂上。
 3. 将鼠标移到屏幕上沿展开绳子，单击图片复制，或拖拽到需要的应用。
 
@@ -55,7 +55,7 @@ PicRope 将截图暂存在屏幕上沿，单击复制、拖拽取用，也可以
 | 显示 / 收起 | `Ctrl+Alt+T`，或单击托盘图标 |
 | 区域截图与标注 | `Ctrl+Alt+S`，或托盘「更多操作」→「区域截图」；框选后标注，Enter 完成，Esc／右键取消 |
 | 修改截图快捷键 | 托盘「更多操作」→「截图快捷键」，按新组合键后保存；冲突时保留原绑定 |
-| 全选与批量删除 | 图片篮子全选当前标签；文字信封勾选或全选搜索结果，再点击「删除所选」确认数量 |
+| 全选与批量删除 | 图片篮子全选当前标签；文字信封勾选或全选搜索结果，再点击「删除所选」直接删除，无二次确认 |
 | 打开图片 | 双击图片，使用系统默认图片应用 |
 | 编辑图片 | 长按图片，或图片右键 →「编辑」 |
 | 桌面贴图 | 单击夹子取下；单击图钉挂回 |

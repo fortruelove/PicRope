@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -59,18 +60,18 @@ namespace ScreenLine
         internal readonly TextBox Search = new TextBox();
         internal readonly ListBox List = new ListBox();
         internal readonly Button SelectAllButton, DeleteSelectedButton;
-        bool refreshing, confirming;
-        string checkedSignature;
+        bool refreshing;
+
         internal int VisibleCount { get { return List.Items.Count; } }
         internal string Feedback { get { return feedback.Text; } }
         bool closed;
 
-        public TextWindow(TextCollection texts, ShelfWindow shelf)
+        public TextWindow(TextCollection texts, ShelfWindow shelf, Func<Task<string>> paste = null, Action<TextItem> edit = null)
         {
             this.texts = texts; this.shelf = shelf;
             foreach (var item in texts.Items) item.IsMarked = false;
             Title = "文字 · 图绳"; Owner = shelf;
-            Width = 460; Height = 456;
+            Width = 560; Height = 510;
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
             AllowsTransparency = true; Background = Brushes.Transparent;
             ShowInTaskbar = false; Topmost = true;
@@ -83,6 +84,7 @@ namespace ScreenLine
             var body = new Grid();
             body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(52) });
             body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(48) });
+            body.RowDefinitions.Add(new RowDefinition {Height=GridLength.Auto});
             body.RowDefinitions.Add(new RowDefinition());
             body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(48) });
             var card = LightTheme.Card(body); card.Margin = new Thickness(16, 11, 16, 16); card.Padding = new Thickness(0); card.CornerRadius = new CornerRadius(12);
@@ -105,7 +107,7 @@ namespace ScreenLine
             searchPanel.Children.Add(new Border { CornerRadius = new CornerRadius(7), BorderBrush = LightTheme.Brush("#DCE2EA"), BorderThickness = new Thickness(1), Child = Search });
             var placeholder = new TextBlock { Text = "搜索文字", IsHitTestVisible = false, Margin = new Thickness(11, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, FontSize = 13, Foreground = LightTheme.Brush("#8390A1") };
             searchPanel.Children.Add(placeholder);
-            Search.TextChanged += delegate { confirming = false; placeholder.Visibility = Search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; Refresh(); };
+            Search.TextChanged += delegate { placeholder.Visibility = Search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; Refresh(); };
             Grid.SetRow(searchPanel, 1); body.Children.Add(searchPanel);
 
             List.BorderThickness = new Thickness(0); List.Background = Brushes.Transparent; List.Margin = new Thickness(10, 0, 10, 10);
@@ -162,14 +164,34 @@ namespace ScreenLine
             List.AddHandler(System.Windows.Controls.Primitives.ToggleButton.CheckedEvent, new RoutedEventHandler(SelectionChanged));
             List.AddHandler(System.Windows.Controls.Primitives.ToggleButton.UncheckedEvent, new RoutedEventHandler(SelectionChanged));
             var listPanel = new Grid(); listPanel.Children.Add(List); listPanel.Children.Add(empty);
-            Grid.SetRow(listPanel, 2); body.Children.Add(listPanel);
+            Grid.SetRow(listPanel, 3); body.Children.Add(listPanel);
             var batch = new Grid { Margin = new Thickness(18, 0, 18, 6) };
             SelectAllButton = LightTheme.Button("全选", SelectAll, "quiet"); SelectAllButton.HorizontalAlignment = HorizontalAlignment.Left;
             DeleteSelectedButton = LightTheme.Button("删除所选", DeleteSelected, "quiet");
             DeleteSelectedButton.HorizontalAlignment = HorizontalAlignment.Right; DeleteSelectedButton.Foreground = LightTheme.Brush("#B74E4A");
             SelectAllButton.FontSize = DeleteSelectedButton.FontSize = 14;
-            batch.Children.Add(SelectAllButton); batch.Children.Add(DeleteSelectedButton); Grid.SetRow(batch, 3); body.Children.Add(batch);
+            batch.Children.Add(SelectAllButton); batch.Children.Add(DeleteSelectedButton); Grid.SetRow(batch, 4); body.Children.Add(batch);
 
+            var tools=new WrapPanel {Margin=new Thickness(18,0,18,8)};
+            var auto=new CheckBox {Content="新文字自动上绳",IsChecked=texts.AutoHang,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,12,0)};
+            auto.Checked+=delegate {try{texts.AutoHang=true;}catch(Exception error){texts.Store.Log(error);ShowFeedback("无法保存设置");}};
+            auto.Unchecked+=delegate {try{texts.AutoHang=false;}catch(Exception error){texts.Store.Log(error);ShowFeedback("无法保存设置");}};
+            tools.Children.Add(auto);
+            tools.Children.Add(LightTheme.Button("挂上绳子",delegate {var chosen=texts.Items.Where(t=>t.IsMarked).ToArray(); if(chosen.Length==0 && List.SelectedItem is TextItem)chosen=new[]{(TextItem)List.SelectedItem}; if(chosen.Length==0){ShowFeedback("请先选择文字");return;}try{texts.SetHanging(chosen,true);ShowFeedback("已挂上绳子");}catch(Exception error){texts.Store.Log(error);ShowFeedback("挂绳未完成");}}));
+            if(paste!=null) {
+                tools.Children.Add(LightTheme.Button("粘贴文字",async delegate {ShowFeedback(await paste());}));
+                PreviewKeyDown+=async delegate(object sender,KeyEventArgs e){if(e.Key==Key.V && Keyboard.Modifiers==ModifierKeys.Control && Keyboard.FocusedElement != Search){e.Handled=true;ShowFeedback(await paste());}};
+            }
+            tools.Children.Add(LightTheme.Button("配图 / 编辑…",delegate {var item=List.SelectedItem as TextItem;if(item!=null && edit!=null)edit(item);else ShowFeedback("请先选择一条文字");},"quiet"));
+            List.PreviewMouseRightButtonUp+=delegate(object sender,MouseButtonEventArgs e){
+                var element=e.OriginalSource as FrameworkElement; var item=element==null?null:element.DataContext as TextItem;
+                if(item==null)return; List.SelectedItem=item;
+                var menu=new ContextMenu();
+                var mount=new MenuItem {Header=item.Hanging?"取下放信封":"挂上绳子"};mount.Click+=delegate{try{texts.SetHanging(new[]{item},!item.Hanging);}catch(Exception error){texts.Store.Log(error);ShowFeedback("挂绳操作未完成");}};menu.Items.Add(mount);
+                if(edit!=null){var change=new MenuItem{Header="添加图片 / 编辑文字…"};change.Click+=delegate{edit(item);};menu.Items.Add(change);}
+                menu.PlacementTarget=List;menu.IsOpen=true;e.Handled=true;
+            };
+            Grid.SetRow(tools,2);body.Children.Add(tools);
             feedbackTimer.Tick += delegate { feedback.Text = ""; feedbackTimer.Stop(); };
             SourceInitialized += delegate { Position(); };
             shelf.SizeChanged += ShelfMoved; shelf.LocationChanged += ShelfMoved; shelf.RopeHidden += Close;
@@ -212,7 +234,7 @@ namespace ScreenLine
             count.Text = texts.Items.Count.ToString();
             empty.Text = texts.Items.Count == 0 ? texts.CollectClipboard
                 ? "还没有文字\n复制的文字会自动出现在这里"
-                : "尚未开启文字收集\n在托盘「剪贴板收集」中开启「文字」" : "没有找到匹配的文字";
+                : "还没有文字\n点击「粘贴文字」，或开启自动获取剪贴板" : "没有找到匹配的文字";
             empty.Visibility = List.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             if (scroll != null) scroll.ScrollToVerticalOffset(offset);
         }
@@ -223,13 +245,10 @@ namespace ScreenLine
         {
             var items = List.Items.Cast<TextItem>().ToArray();
             int selected = items.Count(item => item.IsMarked);
-            string signature = string.Join("|", items.Where(item => item.IsMarked).Select(item => item.Id).OrderBy(id => id));
-            if (signature != checkedSignature) confirming = false;
-            checkedSignature = signature;
             SelectAllButton.IsEnabled = items.Length > 0;
             SelectAllButton.Content = selected == items.Length && selected > 0 ? "取消全选" : "全选";
             DeleteSelectedButton.IsEnabled = selected > 0;
-            DeleteSelectedButton.Content = confirming ? "确认删除 " + selected + " 条" : selected == 0 ? "删除所选" : "删除所选（" + selected + "）";
+            DeleteSelectedButton.Content = selected == 0 ? "删除所选" : "删除所选（" + selected + "）";
         }
 
         void SelectAll()
@@ -244,7 +263,6 @@ namespace ScreenLine
         {
             var items = List.Items.Cast<TextItem>().Where(item => item.IsMarked).ToArray();
             if (items.Length == 0) return;
-            if (!confirming) { confirming = true; DeleteSelectedButton.Content = "确认删除 " + items.Length + " 条"; return; }
             try { texts.RemoveMany(items); ShowFeedback("已删除 " + items.Length + " 条"); }
             catch (Exception error) { texts.Store.Log(error); ShowFeedback("删除未完成，请重试"); UpdateBatch(); }
         }
@@ -274,7 +292,7 @@ namespace ScreenLine
                 if ((string)button.Tag == "delete") { texts.Remove(item); ShowFeedback("已删除"); }
                 else
                 {
-                    var data = new DataObject(); data.SetText(item.Content, TextDataFormat.UnicodeText);
+                    var data = new DataObject(); data.SetText(item.Content, TextDataFormat.UnicodeText); data.SetData(ClipboardRules.OwnFormat,"1");
                     await WindowsClipboard.Write(data); ShowFeedback("已复制");
                 }
             }
