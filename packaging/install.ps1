@@ -33,13 +33,35 @@ $uninstallCommand = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' 
 New-ItemProperty -Path $uninstallKey -Name UninstallString -Value $uninstallCommand -PropertyType String -Force | Out-Null
 New-ItemProperty -Path $uninstallKey -Name NoModify -Value 1 -PropertyType DWord -Force | Out-Null
 New-ItemProperty -Path $uninstallKey -Name NoRepair -Value 1 -PropertyType DWord -Force | Out-Null
-Start-Process -FilePath $exePath -WorkingDirectory $installPath -WindowStyle Hidden
-Write-Output '图绳安装完成，桌面已创建 PicRope 快捷方式。'
-
 Add-Content -LiteralPath $logPath -Value 'Installation completed.' -Encoding UTF8
 }
 catch {
     Add-Content -LiteralPath $logPath -Value ($_ | Out-String) -Encoding UTF8
     Write-Host ('安装失败。详情见安装包目录中的 logs\latest.log。')
     throw
+}
+
+# Installation is complete. A declined or blocked launch must not undo or misreport it.
+Write-Output '图绳安装已完成，桌面已创建 PicRope 快捷方式。'
+try {
+    # Launch the interactive application normally so Windows can show its confirmation UI.
+    Start-Process -FilePath $exePath -WorkingDirectory $installPath
+    try { Add-Content -LiteralPath $logPath -Value 'Application launch requested.' -Encoding UTF8 }
+    catch { Write-Warning '程序启动请求已提交，但安装日志写入失败。' }
+}
+catch {
+    $launchError = $_
+    $nativeCode = $null
+    $exception = $_.Exception
+    while ($exception) {
+        if ($exception -is [ComponentModel.Win32Exception]) { $nativeCode = $exception.NativeErrorCode; break }
+        $exception = $exception.InnerException
+    }
+    Add-Content -LiteralPath $logPath -Value ('Application launch failed. NativeErrorCode=' + $nativeCode + [Environment]::NewLine + ($launchError | Out-String)) -Encoding UTF8
+    if ($nativeCode -eq 1223) {
+        Write-Warning '安装已完成，但 Windows 返回启动操作已取消。可稍后双击桌面 PicRope 快捷方式启动；若出现系统提示，请查看提示内容并决定是否允许运行。'
+    }
+    else {
+        Write-Warning '安装已完成，但程序未能自动启动。请尝试双击桌面 PicRope 快捷方式；启动错误已记录到安装包目录中的 logs\latest.log。'
+    }
 }
