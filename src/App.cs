@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Specialized;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -546,13 +546,15 @@ namespace ScreenLine
             using (var instance = new Mutex(true, @"Local\TangHao.ScreenLine.Windows", out first))
             {
                 if (!first) { WindowsNative.ShowExisting(); return; }
+                RuntimeLog.Start();
+                AppDomain.CurrentDomain.UnhandledException += delegate(object sender, UnhandledExceptionEventArgs args) { RuntimeLog.Write(args.ExceptionObject.ToString()); };
                 var store = new StateStore(StateStore.DefaultRoot);
                 var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
                 LightTheme.Install(app);
                 DesktopController controller = null;
                 app.DispatcherUnhandledException += delegate(object sender, System.Windows.Threading.DispatcherUnhandledExceptionEventArgs args) { store.Log(args.Exception); args.Handled = true; };
-                app.Startup += async delegate { controller = new DesktopController(store, WindowsNative.ScreenshotFolder()); await controller.Start(); };
-                app.Exit += delegate { if (controller != null) controller.Dispose(); };
+                app.Startup += async delegate { RuntimeLog.Write("Initializing desktop controller"); controller = new DesktopController(store, WindowsNative.ScreenshotFolder()); await controller.Start(); RuntimeLog.Write("Application ready"); };
+                app.Exit += delegate { RuntimeLog.Write("Application exiting"); if (controller != null) controller.Dispose(); };
                 app.Run();
             }
         }

@@ -13,6 +13,33 @@ using System.Windows.Media.Imaging;
 
 namespace ScreenLine
 {
+    internal static class RuntimeLog
+    {
+        static readonly object gate = new object();
+        static string file;
+        public static void Start()
+        {
+            string directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
+            file = null;
+            try
+            {
+                Directory.CreateDirectory(directory);
+                string target = Path.Combine(directory, "latest.log");
+                File.WriteAllText(target, "PicRope startup" + Environment.NewLine, new UTF8Encoding(false));
+                file = target;
+            }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+        public static void Write(string message)
+        {
+            if (file == null) return;
+            try { lock (gate) File.AppendAllText(file, DateTime.Now.ToString("s") + " " + message + Environment.NewLine); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
     internal sealed class SavedState
     {
         public bool CollectClipboard { get; set; }
@@ -75,6 +102,7 @@ namespace ScreenLine
 
         public void Save()
         {
+            RuntimeLog.Write("Saving application state");
             Directory.CreateDirectory(Root);
             string temporary = file + ".tmp";
             File.WriteAllText(temporary, serializer.Serialize(State), new UTF8Encoding(false));
@@ -83,6 +111,7 @@ namespace ScreenLine
 
         public void Log(Exception error)
         {
+            RuntimeLog.Write(error.ToString());
             Directory.CreateDirectory(Root);
             File.AppendAllText(Path.Combine(Root, "error.log"), DateTime.Now.ToString("s") + " " + error + Environment.NewLine);
         }

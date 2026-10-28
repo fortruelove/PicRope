@@ -38,6 +38,7 @@ PicRope 将截图暂存在屏幕上沿，单击复制、拖拽取用，也可以
 ## 开始使用
 
 1. 从 [Releases 下载最新版](https://github.com/fortruelove/PicRope/releases/latest)，完整解压后运行 `Install.cmd`。
+   安装失败时查看解压目录中的 `logs/latest.log`。请先退出已运行的图绳；安装无需管理员权限，也不依赖 WMI 服务。程序运行日志位于安装目录的 `logs/latest.log`，每次启动重建。
 2. 启动图绳，用 `Win+PrtScn` 截图。保存到 Windows 截图文件夹的新图片会自动挂上。
 3. 将鼠标移到屏幕上沿展开绳子，单击图片复制，或拖拽到需要的应用。
 

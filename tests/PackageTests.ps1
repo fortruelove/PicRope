@@ -26,6 +26,18 @@ try {
             throw ('发布包包含个人路径或测试内容：' + $entry.FullName)
         }
     }
+    foreach ($entry in $archive.Entries | Where-Object { $_.Name -like '*.ps1' }) {
+        $stream = New-Object IO.MemoryStream
+        try {
+            $inputStream = $entry.Open()
+            try { $inputStream.CopyTo($stream) } finally { $inputStream.Dispose() }
+            $bytes = $stream.ToArray()
+            if ($bytes.Length -lt 3 -or $bytes[0] -ne 239 -or $bytes[1] -ne 187 -or $bytes[2] -ne 191) { throw ('PowerShell script requires UTF-8 BOM: ' + $entry.FullName) }
+            $tokens = $null; $errors = $null
+            [Management.Automation.Language.Parser]::ParseInput([Text.Encoding]::UTF8.GetString($bytes), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count) { throw ('Invalid PowerShell script: ' + $entry.FullName) }
+        } finally { $stream.Dispose() }
+    }
     Write-Output ('发布包检查通过：' + $files.Count + ' 个白名单文件，无测试数据、个人路径或浏览器缓存。')
 }
 finally { $archive.Dispose() }

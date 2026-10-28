@@ -18,6 +18,20 @@ namespace ScreenLine.Tests
             Console.OutputEncoding = Encoding.UTF8;
             root = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "test-data", "core-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(root);
+            Run("运行日志启动时创建并清空旧记录", delegate
+            {
+                RuntimeLog.Start(); RuntimeLog.Write("previous-session"); RuntimeLog.Start();
+                string log = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs", "latest.log");
+                Check(File.Exists(log) && !File.ReadAllText(log).Contains("previous-session"));
+                RuntimeLog.Write("initialization-complete");
+                Check(File.ReadAllText(log).Contains("initialization-complete"));
+                using (var locked = new FileStream(log, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                {
+                    RuntimeLog.Write("locked-log");
+                    var store = new StateStore(Path.Combine(root, "logging")); store.Save();
+                    Check(File.Exists(Path.Combine(store.Root, "state.json")));
+                }
+            });
             Run("弹簧在不同帧率下有一致轨迹", delegate
             {
                 var slow = new SpringMotion(0.55, 0.78, 0) { Target = 172 };
