@@ -52,10 +52,17 @@ jobs:
           Start-Process -FilePath (Join-Path $installed 'PicRope.exe') -ArgumentList '--quit' -WindowStyle Hidden -Wait
           $version = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $PWD 'build/PicRope.exe')).ProductVersion
           if ($version -ne '1.2.6') { throw 'This workflow only publishes version 1.2.6' }
-      - name: Publish only the requested new v1.2.6
+      - name: Update the explicitly requested existing v1.2.6
         shell: pwsh
         run: |
-          gh release view v1.2.6 --repo fortruelove/PicRope *> $null
-          if ($LASTEXITCODE -eq 0) { throw 'Release v1.2.6 already exists; refusing to overwrite it' }
-          gh release create v1.2.6 releases/PicRope-1.2.6-windows-x64.zip releases/PicRope-1.2.6-windows-x64.zip.sha256 --repo fortruelove/PicRope --target $env:RELEASE_SHA --title 'PicRope 1.2.6' --notes-file docs/releases/1.2.6.md --latest
-          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }
+          gh release view v1.2.6 --repo fortruelove/PicRope
+          if ($LASTEXITCODE -ne 0) { throw 'Requested existing v1.2.6 release was not found' }
+          $tag = gh api repos/fortruelove/PicRope/git/ref/tags/v1.2.6 | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect release tag' }
+          if ($tag.object.sha -ne 'c1bf96d19597099ef7f9d473fd4cb6a70ac45924' -and $tag.object.sha -ne $env:RELEASE_SHA) { throw 'Release tag changed unexpectedly' }
+          gh release upload v1.2.6 releases/PicRope-1.2.6-windows-x64.zip releases/PicRope-1.2.6-windows-x64.zip.sha256 --repo fortruelove/PicRope --clobber
+          if ($LASTEXITCODE -ne 0) { throw 'Release asset replacement failed' }
+          gh api --method PATCH repos/fortruelove/PicRope/git/refs/tags/v1.2.6 -f sha=$env:RELEASE_SHA -F force=true
+          if ($LASTEXITCODE -ne 0) { throw 'Release tag update failed' }
+          gh release edit v1.2.6 --repo fortruelove/PicRope --target $env:RELEASE_SHA --notes-file docs/releases/1.2.6.md --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release metadata update failed' }

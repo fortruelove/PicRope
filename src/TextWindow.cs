@@ -70,6 +70,7 @@ namespace ScreenLine
         internal readonly TextBox Search = new TextBox();
         internal readonly ListBox List = new ListBox();
         internal readonly Button SelectAllButton, DeleteSelectedButton;
+        internal readonly Button NewTextButton;
         bool refreshing;
 
         internal int VisibleCount { get { return List.Items.Count; } }
@@ -200,6 +201,7 @@ namespace ScreenLine
             Grid.SetRow(bottom,4);body.Children.Add(bottom);
 
             var tools=new StackPanel {Orientation=Orientation.Horizontal,VerticalAlignment=VerticalAlignment.Center};
+            NewTextButton=LightTheme.Button("新建文字",NewText); tools.Children.Add(NewTextButton);
             var auto=new CheckBox {IsChecked=texts.AutoHang,VerticalAlignment=VerticalAlignment.Center,Cursor=Cursors.Hand,ToolTip="关闭后，新文字仍收进信封",Template=LightTheme.AutoHangSwitchTemplate};
             AutomationProperties.SetName(auto,"新文字自动上绳");
             auto.Checked+=delegate {try{texts.AutoHang=true;}catch(Exception error){texts.Store.Log(error);ShowFeedback("无法保存设置");}};
@@ -223,6 +225,7 @@ namespace ScreenLine
             };
             foreach(var button in tools.Children.OfType<Button>()) button.Margin=new Thickness(0,0,8,0);
             actionBar.Children.Add(tools);
+            actionBar.SizeChanged+=delegate {searchPanel.Width=Math.Max(120,Math.Min(260,actionBar.ActualWidth-tools.DesiredSize.Width-16));};
             feedbackTimer.Tick += delegate { feedback.Text = ""; feedbackTimer.Stop(); };
             SourceInitialized += delegate { Position(); };
             shelf.SizeChanged += ShelfMoved; shelf.LocationChanged += ShelfMoved; shelf.RopeHidden += Close;
@@ -254,7 +257,7 @@ namespace ScreenLine
             if (closed) return;
             if (savingDetail) { count.Text = texts.Items.Count.ToString(); return; }
             if (!SaveDetails()) return;
-            var selected = List.SelectedItem;
+            var selected = detailItem ?? List.SelectedItem as TextItem;
             var scroll = FindScroll(List);
             double offset = scroll == null ? 0 : scroll.VerticalOffset;
             string query = Search.Text.Trim();
@@ -262,9 +265,9 @@ namespace ScreenLine
             var visible = texts.Items.Where(item => item.Content.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) >= 0).ToArray();
             foreach (var item in texts.Items.Except(visible)) item.IsMarked = false;
             List.ItemsSource = visible;
-            List.SelectedItem = visible.Contains(selected as TextItem) ? selected : visible.FirstOrDefault();
+            List.SelectedItem = creatingText ? null : visible.Contains(selected as TextItem) ? selected : visible.FirstOrDefault();
             refreshing = false; UpdateBatch();
-            LoadDetails(List.SelectedItem as TextItem);
+            if (!creatingText) LoadDetails(List.SelectedItem as TextItem);
             count.Text = texts.Items.Count.ToString();
             empty.Text = texts.Items.Count == 0 ? texts.CollectClipboard
                 ? "还没有文字\n复制的文字会自动出现在这里"

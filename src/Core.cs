@@ -189,6 +189,12 @@ namespace ScreenLine
             if (string.IsNullOrWhiteSpace(content)) return null;
             var existing = Items.Find(item => item.Content == content);
             if (existing != null) return existing;
+            return Create(content);
+        }
+
+        public TextItem Create(string content)
+        {
+            if (string.IsNullOrWhiteSpace(content)) return null;
             var added = new TextItem { Id = Guid.NewGuid().ToString("N"), Content = content, CreatedUtc = DateTime.UtcNow, Hanging = AutoHang };
             var order=Store.State.CardOrder.ToList();
             if(Store.State.CardOrder.Count==0) {Store.State.CardOrder.AddRange(Store.State.Images);Store.State.CardOrder.AddRange(Items.Where(t=>t.Hanging).Reverse().Select(t=>"text:"+t.Id));}

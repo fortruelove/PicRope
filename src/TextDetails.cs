@@ -14,7 +14,18 @@ namespace ScreenLine
         readonly TextBlock detailStatus = new TextBlock { Text = "选择左侧文字查看详情", FontSize = 12, Foreground = LightTheme.Brush("#65717F") };
         readonly DispatcherTimer saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(350) };
         TextItem detailItem;
-        bool loadingDetail, savingDetail;
+        bool loadingDetail, savingDetail, creatingText;
+
+        void NewText()
+        {
+            if (!SaveDetails()) return;
+            Search.Text = "";
+            refreshing = true; List.SelectedItem = null; refreshing = false;
+            detailItem = null; creatingText = true; loadingDetail = true;
+            DetailEditor.Text = ""; DetailEditor.IsEnabled = true;
+            detailTime.Text = "新文字"; detailStatus.Text = "直接输入文字，内容将自动保存";
+            loadingDetail = false; DetailEditor.Focus();
+        }
 
         FrameworkElement CreateDetails()
         {
@@ -35,7 +46,7 @@ namespace ScreenLine
             detailStatus.VerticalAlignment = VerticalAlignment.Bottom; Grid.SetRow(detailStatus, 2); panel.Children.Add(detailStatus);
             DetailEditor.TextChanged += delegate
             {
-                if (loadingDetail || detailItem == null) return;
+                if (loadingDetail || (detailItem == null && !creatingText)) return;
                 detailStatus.Text = "正在编辑…"; saveTimer.Stop(); saveTimer.Start();
             };
             saveTimer.Tick += delegate { SaveDetails(); };
@@ -43,7 +54,7 @@ namespace ScreenLine
             {
                 if (refreshing) return;
                 var next = List.SelectedItem as TextItem;
-                if (next == detailItem) return;
+                if (next == detailItem && !creatingText) return;
                 if (!SaveDetails())
                 {
                     refreshing = true; List.SelectedItem = detailItem; refreshing = false; return;
@@ -57,7 +68,8 @@ namespace ScreenLine
 
         void LoadDetails(TextItem item)
         {
-            if (detailItem == item) return;
+            if (detailItem == item && !creatingText) return;
+            creatingText = false;
             detailItem = item; loadingDetail = true;
             DetailEditor.Text = item == null ? "" : item.Content;
             DetailEditor.IsEnabled = item != null;
@@ -69,12 +81,19 @@ namespace ScreenLine
         bool SaveDetails()
         {
             saveTimer.Stop();
-            if (savingDetail || detailItem == null || !texts.Items.Contains(detailItem) || DetailEditor.Text == detailItem.Content) return true;
-            bool saved = false;
+            if (savingDetail) return true;
+            if (creatingText) { if (string.IsNullOrWhiteSpace(DetailEditor.Text)) return true; }
+            else if (detailItem == null || !texts.Items.Contains(detailItem) || DetailEditor.Text == detailItem.Content) return true;
+            bool saved = false, created = false;
             try
             {
                 savingDetail = true;
-                texts.UpdateContent(detailItem, DetailEditor.Text);
+                if (creatingText)
+                {
+                    detailItem = texts.Create(DetailEditor.Text); creatingText = false; created = true;
+                    detailTime.Text = detailItem.CreatedUtc.ToLocalTime().ToString("MM-dd HH:mm");
+                }
+                else texts.UpdateContent(detailItem, DetailEditor.Text);
                 saved = true;
                 detailStatus.Text = "已自动保存";
                 return true;
@@ -87,7 +106,7 @@ namespace ScreenLine
             finally
             {
                 savingDetail = false;
-                if (saved && Search.Text.Trim().Length > 0 && !closed)
+                if (saved && (created || Search.Text.Trim().Length > 0) && !closed)
                     Dispatcher.BeginInvoke(new Action(delegate { if (!closed) Refresh(); }));
             }
         }
