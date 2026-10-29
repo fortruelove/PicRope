@@ -18,9 +18,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("PicRope · 图绳")]
 [assembly: AssemblyProduct("PicRope")]
 [assembly: AssemblyDescription("图绳：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.2.5.0")]
-[assembly: AssemblyFileVersion("1.2.5.0")]
-[assembly: AssemblyInformationalVersion("1.2.5")]
+[assembly: AssemblyVersion("1.2.6.0")]
+[assembly: AssemblyFileVersion("1.2.6.0")]
+[assembly: AssemblyInformationalVersion("1.2.6")]
 
 namespace ScreenLine
 {
@@ -355,9 +355,10 @@ namespace ScreenLine
 
         internal void ShowBasket()
         {
-            if (Basket != null) { Basket.Activate(); return; }
+            if (Basket != null) { Basket.Close(); return; }
+            Shelf.Reveal(true, false, 0);
             Gallery.Prune();
-            Basket = new BasketWindow(Gallery, delegate(bool value) { Captures.AutoHang = value; }, Captures.Hang, Act, delegate { return PasteCard(true); });
+            Basket = new BasketWindow(Gallery, delegate(bool value) { Captures.AutoHang = value; }, Captures.Hang, Act, delegate { return PasteCard(true); }, Shelf);
             Basket.Owner = Shelf;
             Shelf.ChoosingBasket = true;
             Shelf.Reveal(true, false, 0);

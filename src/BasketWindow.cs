@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -51,7 +51,7 @@ namespace ScreenLine
         }
     }
 
-    internal sealed class BasketWindow : Window
+    internal sealed partial class BasketWindow : Window
     {
         static readonly ControlTemplate choiceTemplate = (ControlTemplate)XamlReader.Parse(@"<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='Button'>
           <Border x:Name='Surface' Background='Transparent' BorderBrush='Transparent' BorderThickness='1' CornerRadius='8'><ContentPresenter HorizontalAlignment='Stretch'/></Border>
@@ -86,9 +86,11 @@ namespace ScreenLine
         internal int VisibleCount { get { return choices.Count; } }
         internal Button ChoiceFor(string path) { return choices[path]; }
 
-        public BasketWindow(Gallery gallery, Action<bool> setAutoHang, Action<CaptureItem> hang, Action<ShotAction, CaptureItem> act, Func<Task<string>> paste = null)
+        public BasketWindow(Gallery gallery, Action<bool> setAutoHang, Action<CaptureItem> hang, Action<ShotAction, CaptureItem> act, Func<Task<string>> paste = null, ShelfWindow shelf = null)
         {
             this.gallery = gallery; this.setAutoHang = setAutoHang; this.hang = hang; this.act = act;
+            popupShelf = shelf;
+            if (shelf != null) Owner = shelf;
             Title = "图片篮子 · 图绳";
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
             AllowsTransparency = true; Background = Brushes.Transparent;
@@ -109,6 +111,7 @@ namespace ScreenLine
             body.RowDefinitions.Add(new RowDefinition());
             body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(68) });
             var card = LightTheme.Card(body); card.Padding = new Thickness(0); Content = card;
+            if (shelf != null) InitializePopup(card);
 
             var heading = new Grid { Margin = new Thickness(22, 0, 18, 0) };
             heading.ColumnDefinitions.Add(new ColumnDefinition());
@@ -119,20 +122,14 @@ namespace ScreenLine
             var tools = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
             tools.Children.Add(new TextBlock { Text = "新图片自动上绳", FontSize = 12, Foreground = LightTheme.Brush("#65717F"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
             AutoHang = new CheckBox { VerticalAlignment = VerticalAlignment.Center, Cursor = Cursors.Hand, ToolTip = "关闭后，新图片仍收进图片篮子" };
-            AutoHang.Template = (ControlTemplate)XamlReader.Parse(@"<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' TargetType='CheckBox'>
-              <Border x:Name='Track' Width='38' Height='22' CornerRadius='11' Background='#B8C0CC' BorderBrush='Transparent' BorderThickness='1'>
-                <Border x:Name='Knob' Width='16' Height='16' CornerRadius='8' Background='White' HorizontalAlignment='Left' Margin='2,0'/>
-              </Border><ControlTemplate.Triggers>
-                <Trigger Property='IsChecked' Value='True'><Setter TargetName='Track' Property='Background' Value='#2463AE'/><Setter TargetName='Knob' Property='HorizontalAlignment' Value='Right'/></Trigger>
-                <Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='Track' Property='BorderBrush' Value='#283343'/></Trigger>
-              </ControlTemplate.Triggers></ControlTemplate>");
+            AutoHang.Template = LightTheme.AutoHangSwitchTemplate;
             AutomationProperties.SetName(AutoHang, "新图片自动上绳");
             AutoHang.Checked += AutoChanged; AutoHang.Unchecked += AutoChanged;
             tools.Children.Add(AutoHang);
             var close = LightTheme.Button("", Close, "quiet"); close.Content = LightTheme.CloseIcon();
             close.Width = close.Height = 28; close.MinWidth = 0; close.Padding = new Thickness(0); close.Margin = new Thickness(22, 0, 0, 0);
             AutomationProperties.SetName(close, "关闭图片篮子"); tools.Children.Add(close); Grid.SetColumn(tools, 1); heading.Children.Add(tools);
-            heading.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) { if (e.OriginalSource is TextBlock) DragMove(); };
+            heading.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) { if (popupShelf == null && e.OriginalSource is TextBlock) DragMove(); };
             body.Children.Add(new Border { BorderBrush = LightTheme.Brush("#E8EBEF"), BorderThickness = new Thickness(0, 0, 0, 1), Child = heading });
 
             var tabs = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(22, 6, 0, 8) };
@@ -203,6 +200,7 @@ namespace ScreenLine
             Grid.SetRow(bottom, 3); body.Children.Add(bottom);
             SourceInitialized += delegate
             {
+                if (popupShelf != null) { PositionPopup(); return; }
                 int width = (int)Math.Round(Width * dpi), height = (int)Math.Round(Height * dpi);
                 WindowsNative.SetWindowPos(new WindowInteropHelper(this).Handle, IntPtr.Zero,
                     screen.WorkingArea.Left + (screen.WorkingArea.Width - width) / 2,

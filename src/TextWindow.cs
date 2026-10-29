@@ -48,7 +48,17 @@ namespace ScreenLine
         public object ConvertBack(object value, Type type, object parameter, CultureInfo culture) { throw new NotSupportedException(); }
     }
 
-    internal sealed class TextWindow : Window
+    public sealed class TextSummary : IValueConverter
+    {
+        public object Convert(object value, Type type, object parameter, CultureInfo culture)
+        {
+            string text = (value as string ?? "").Replace("\r", " ").Replace("\n", " ").Replace("\t", " ").Trim();
+            return text.Length == 0 ? "（空白文字）" : text;
+        }
+        public object ConvertBack(object value, Type type, object parameter, CultureInfo culture) { throw new NotSupportedException(); }
+    }
+
+    internal sealed partial class TextWindow : Window
     {
         readonly TextCollection texts;
         readonly ShelfWindow shelf;
@@ -71,7 +81,7 @@ namespace ScreenLine
             this.texts = texts; this.shelf = shelf;
             foreach (var item in texts.Items) item.IsMarked = false;
             Title = "文字 · 图绳"; Owner = shelf;
-            Width = 560; Height = 510;
+            Width = 960; Height = 620;
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
             AllowsTransparency = true; Background = Brushes.Transparent;
             ShowInTaskbar = false; Topmost = true;
@@ -82,11 +92,11 @@ namespace ScreenLine
 
             var root = new Grid(); Content = root;
             var body = new Grid();
-            body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(52) });
-            body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(48) });
-            body.RowDefinitions.Add(new RowDefinition {Height=GridLength.Auto});
+            body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(62) });
+            body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(56) });
+            body.RowDefinitions.Add(new RowDefinition {Height=new GridLength(0)});
             body.RowDefinitions.Add(new RowDefinition());
-            body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(48) });
+            body.RowDefinitions.Add(new RowDefinition { Height = new GridLength(68) });
             var card = LightTheme.Card(body); card.Margin = new Thickness(16, 11, 16, 16); card.Padding = new Thickness(0); card.CornerRadius = new CornerRadius(12);
             root.Children.Add(card); root.Children.Add(pointer);
 
@@ -100,7 +110,7 @@ namespace ScreenLine
             close.Width = close.Height = 28; close.MinWidth = 0; close.Padding = new Thickness(0); close.HorizontalAlignment = HorizontalAlignment.Right;
             AutomationProperties.SetName(close, "关闭文字"); header.Children.Add(close); body.Children.Add(header);
 
-            var searchPanel = new Grid { Margin = new Thickness(18, 0, 18, 10) };
+            var searchPanel = new Grid { Width=260, Height=34, HorizontalAlignment=HorizontalAlignment.Right, VerticalAlignment=VerticalAlignment.Center };
             Search.BorderThickness = new Thickness(0); Search.Background = Brushes.Transparent; Search.Padding = new Thickness(10, 6, 10, 6);
             Search.VerticalContentAlignment = VerticalAlignment.Center; Search.FontSize = 13; Search.Foreground = LightTheme.Brush("#283343");
             AutomationProperties.SetName(Search, "搜索文字");
@@ -108,7 +118,12 @@ namespace ScreenLine
             var placeholder = new TextBlock { Text = "搜索文字", IsHitTestVisible = false, Margin = new Thickness(11, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, FontSize = 13, Foreground = LightTheme.Brush("#8390A1") };
             searchPanel.Children.Add(placeholder);
             Search.TextChanged += delegate { placeholder.Visibility = Search.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed; Refresh(); };
-            Grid.SetRow(searchPanel, 1); body.Children.Add(searchPanel);
+            var actionBar = new Grid { Margin = new Thickness(22, 6, 22, 8) };
+            actionBar.ColumnDefinitions.Add(new ColumnDefinition { Width=GridLength.Auto });
+            actionBar.ColumnDefinitions.Add(new ColumnDefinition());
+            Grid.SetColumn(searchPanel,1); actionBar.Children.Add(searchPanel);
+            var actionBorder = new Border { BorderBrush=LightTheme.Brush("#E8EBEF"), BorderThickness=new Thickness(0,0,0,1), Child=actionBar };
+            Grid.SetRow(actionBorder,1); body.Children.Add(actionBorder);
 
             List.BorderThickness = new Thickness(0); List.Background = Brushes.Transparent; List.Margin = new Thickness(10, 0, 10, 10);
             List.FontFamily = FontFamily; List.FontSize = 14;
@@ -122,7 +137,7 @@ namespace ScreenLine
               <ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='Row' Property='Background' Value='#F4F7FB'/></Trigger>
               <Trigger Property='IsSelected' Value='True'><Setter TargetName='Row' Property='Background' Value='#EDF4FF'/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>");
             List.ItemTemplate = (DataTemplate)XamlReader.Parse(@"<DataTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml' xmlns:local='clr-namespace:ScreenLine;assembly=__ASSEMBLY__'>
-              <DataTemplate.Resources><local:TextTime x:Key='TextTime'/><Geometry x:Key='CopyIcon'>__COPY__</Geometry><Geometry x:Key='TrashIcon'>__TRASH__</Geometry><Style x:Key='IconButton' TargetType='Button'>
+              <DataTemplate.Resources><local:TextTime x:Key='TextTime'/><local:TextSummary x:Key='TextSummary'/><Geometry x:Key='CopyIcon'>__COPY__</Geometry><Geometry x:Key='TrashIcon'>__TRASH__</Geometry><Style x:Key='IconButton' TargetType='Button'>
                 <Setter Property='Width' Value='28'/><Setter Property='Height' Value='30'/><Setter Property='Cursor' Value='Hand'/><Setter Property='Foreground' Value='#647386'/><Setter Property='Background' Value='Transparent'/>
                 <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Button'><Border x:Name='Surface' Background='{TemplateBinding Background}' CornerRadius='5'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border>
                 <ControlTemplate.Triggers><Trigger Property='IsMouseOver' Value='True'><Setter TargetName='Surface' Property='Background' Value='#E7EEF8'/><Setter Property='Foreground' Value='#2463AE'/></Trigger>
@@ -147,8 +162,7 @@ namespace ScreenLine
                   </ControlTemplate></CheckBox.Template>
                 </CheckBox>
                 <StackPanel Margin='28,0,8,0'>
-                  <Grid><TextBlock x:Name='Preview' Text='{Binding Content}' TextWrapping='Wrap' TextTrimming='CharacterEllipsis' MaxHeight='44' LineHeight='22' Foreground='#283343'/>
-                  <TextBox x:Name='FullText' Text='{Binding Content, Mode=OneWay}' IsReadOnly='True' TextWrapping='Wrap' MaxHeight='220' VerticalScrollBarVisibility='Auto' BorderThickness='0' Padding='0' Background='Transparent' Foreground='#283343' Visibility='Collapsed'/></Grid>
+                  <TextBlock Text='{Binding Content, Converter={StaticResource TextSummary}}' TextWrapping='NoWrap' TextTrimming='CharacterEllipsis' Height='22' LineHeight='22' Foreground='#283343'/>
                   <TextBlock Text='{Binding CreatedUtc, Converter={StaticResource TextTime}}' FontSize='11' Foreground='#8390A1' Margin='0,5,0,0'/>
                 </StackPanel>
                 <StackPanel Grid.Column='1' Orientation='Horizontal' VerticalAlignment='Center'>
@@ -156,7 +170,6 @@ namespace ScreenLine
                   <Button Tag='delete' ToolTip='删除' AutomationProperties.Name='删除文字' Style='{StaticResource IconButton}'><Viewbox Width='16' Height='16'><Path Data='{StaticResource TrashIcon}' Stroke='{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}' StrokeThickness='1.65' StrokeStartLineCap='Round' StrokeEndLineCap='Round' StrokeLineJoin='Round'/></Viewbox></Button>
                 </StackPanel>
               </Grid></Border>
-              <DataTemplate.Triggers><DataTrigger Binding='{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}' Value='True'><Setter TargetName='Preview' Property='Visibility' Value='Collapsed'/><Setter TargetName='FullText' Property='Visibility' Value='Visible'/></DataTrigger></DataTemplate.Triggers>
             </DataTemplate>".Replace("__ASSEMBLY__", Assembly.GetExecutingAssembly().GetName().Name)
                 .Replace("__COPY__", LightMenu.IconGeometry("copy").ToString(CultureInfo.InvariantCulture))
                 .Replace("__TRASH__", LightMenu.IconGeometry("trash").ToString(CultureInfo.InvariantCulture)));
@@ -164,34 +177,52 @@ namespace ScreenLine
             List.AddHandler(System.Windows.Controls.Primitives.ToggleButton.CheckedEvent, new RoutedEventHandler(SelectionChanged));
             List.AddHandler(System.Windows.Controls.Primitives.ToggleButton.UncheckedEvent, new RoutedEventHandler(SelectionChanged));
             var listPanel = new Grid(); listPanel.Children.Add(List); listPanel.Children.Add(empty);
-            Grid.SetRow(listPanel, 3); body.Children.Add(listPanel);
-            var batch = new Grid { Margin = new Thickness(18, 0, 18, 6) };
-            SelectAllButton = LightTheme.Button("全选", SelectAll, "quiet"); SelectAllButton.HorizontalAlignment = HorizontalAlignment.Left;
-            DeleteSelectedButton = LightTheme.Button("删除所选", DeleteSelected, "quiet");
-            DeleteSelectedButton.HorizontalAlignment = HorizontalAlignment.Right; DeleteSelectedButton.Foreground = LightTheme.Brush("#B74E4A");
-            SelectAllButton.FontSize = DeleteSelectedButton.FontSize = 14;
-            batch.Children.Add(SelectAllButton); batch.Children.Add(DeleteSelectedButton); Grid.SetRow(batch, 4); body.Children.Add(batch);
+            var columns = new Grid();
+            columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
+            columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3, GridUnitType.Star) });
+            columns.Children.Add(listPanel);
+            var details = CreateDetails(); Grid.SetColumn(details, 1); columns.Children.Add(details);
+            Grid.SetRow(columns, 3); body.Children.Add(columns);
+            var batch = new Grid { Margin = new Thickness(22, 0, 20, 0) };
+            batch.ColumnDefinitions.Add(new ColumnDefinition {Width=GridLength.Auto});
+            batch.ColumnDefinitions.Add(new ColumnDefinition());
+            batch.ColumnDefinitions.Add(new ColumnDefinition {Width=GridLength.Auto});
+            SelectAllButton=LightTheme.Button("全选",SelectAll); SelectAllButton.Width=112; SelectAllButton.MinWidth=112; SelectAllButton.Height=38;
+            SelectAllButton.Background=LightTheme.Brush("#E4EEFC"); SelectAllButton.BorderBrush=LightTheme.Brush("#8DB0DF"); SelectAllButton.Foreground=LightTheme.Brush("#205CA7");
+            SelectAllButton.HorizontalAlignment=HorizontalAlignment.Left; SelectAllButton.VerticalAlignment=VerticalAlignment.Center;
+            DeleteSelectedButton=LightTheme.Button("删除所选",DeleteSelected); DeleteSelectedButton.Width=112; DeleteSelectedButton.Height=38;
+            DeleteSelectedButton.HorizontalAlignment=HorizontalAlignment.Right; DeleteSelectedButton.VerticalAlignment=VerticalAlignment.Center;
+            DeleteSelectedButton.Foreground=LightTheme.Brush("#B74E4A"); DeleteSelectedButton.Background=LightTheme.Brush("#FFF8F7");
+            DeleteSelectedButton.BorderBrush=LightTheme.Brush("#ECD6D2");
+            SelectAllButton.FontSize=DeleteSelectedButton.FontSize=14;
+            batch.Children.Add(SelectAllButton); Grid.SetColumn(DeleteSelectedButton,2); batch.Children.Add(DeleteSelectedButton);
+            var bottom = new Border {BorderBrush=LightTheme.Brush("#E8EBEF"),BorderThickness=new Thickness(0,1,0,0),Child=batch};
+            Grid.SetRow(bottom,4);body.Children.Add(bottom);
 
-            var tools=new WrapPanel {Margin=new Thickness(18,0,18,8)};
-            var auto=new CheckBox {Content="新文字自动上绳",IsChecked=texts.AutoHang,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,12,0)};
+            var tools=new StackPanel {Orientation=Orientation.Horizontal,VerticalAlignment=VerticalAlignment.Center};
+            var auto=new CheckBox {IsChecked=texts.AutoHang,VerticalAlignment=VerticalAlignment.Center,Cursor=Cursors.Hand,ToolTip="关闭后，新文字仍收进信封",Template=LightTheme.AutoHangSwitchTemplate};
+            AutomationProperties.SetName(auto,"新文字自动上绳");
             auto.Checked+=delegate {try{texts.AutoHang=true;}catch(Exception error){texts.Store.Log(error);ShowFeedback("无法保存设置");}};
             auto.Unchecked+=delegate {try{texts.AutoHang=false;}catch(Exception error){texts.Store.Log(error);ShowFeedback("无法保存设置");}};
-            tools.Children.Add(auto);
-            tools.Children.Add(LightTheme.Button("挂上绳子",delegate {var chosen=texts.Items.Where(t=>t.IsMarked).ToArray(); if(chosen.Length==0 && List.SelectedItem is TextItem)chosen=new[]{(TextItem)List.SelectedItem}; if(chosen.Length==0){ShowFeedback("请先选择文字");return;}try{texts.SetHanging(chosen,true);ShowFeedback("已挂上绳子");}catch(Exception error){texts.Store.Log(error);ShowFeedback("挂绳未完成");}}));
+            var autoPanel=new StackPanel {Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,40,0)};
+            autoPanel.Children.Add(new TextBlock {Text="新文字自动上绳",FontSize=12,Foreground=LightTheme.Brush("#65717F"),VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)});
+            autoPanel.Children.Add(auto);header.Children.Add(autoPanel);
+            tools.Children.Add(LightTheme.Button("挂上绳子",delegate {if(!SaveDetails())return; var chosen=texts.Items.Where(t=>t.IsMarked).ToArray(); if(chosen.Length==0 && List.SelectedItem is TextItem)chosen=new[]{(TextItem)List.SelectedItem}; if(chosen.Length==0){ShowFeedback("请先选择文字");return;}try{texts.SetHanging(chosen,true);ShowFeedback("已挂上绳子");}catch(Exception error){texts.Store.Log(error);ShowFeedback("挂绳未完成");}}));
             if(paste!=null) {
-                tools.Children.Add(LightTheme.Button("粘贴文字",async delegate {ShowFeedback(await paste());}));
-                PreviewKeyDown+=async delegate(object sender,KeyEventArgs e){if(e.Key==Key.V && Keyboard.Modifiers==ModifierKeys.Control && Keyboard.FocusedElement != Search){e.Handled=true;ShowFeedback(await paste());}};
+                tools.Children.Add(LightTheme.Button("粘贴文字",async delegate {if(SaveDetails())ShowFeedback(await paste());}));
+                PreviewKeyDown+=async delegate(object sender,KeyEventArgs e){if(e.Key==Key.V && Keyboard.Modifiers==ModifierKeys.Control && Keyboard.FocusedElement != Search && !DetailEditor.IsKeyboardFocusWithin){e.Handled=true;if(SaveDetails())ShowFeedback(await paste());}};
             }
-            tools.Children.Add(LightTheme.Button("配图 / 编辑…",delegate {var item=List.SelectedItem as TextItem;if(item!=null && edit!=null)edit(item);else ShowFeedback("请先选择一条文字");},"quiet"));
+            tools.Children.Add(LightTheme.Button("配图 / 编辑…",delegate {if(!SaveDetails())return;var item=List.SelectedItem as TextItem;if(item!=null && edit!=null)edit(item);else ShowFeedback("请先选择一条文字");},"quiet"));
             List.PreviewMouseRightButtonUp+=delegate(object sender,MouseButtonEventArgs e){
                 var element=e.OriginalSource as FrameworkElement; var item=element==null?null:element.DataContext as TextItem;
                 if(item==null)return; List.SelectedItem=item;
                 var menu=new ContextMenu();
                 var mount=new MenuItem {Header=item.Hanging?"取下放信封":"挂上绳子"};mount.Click+=delegate{try{texts.SetHanging(new[]{item},!item.Hanging);}catch(Exception error){texts.Store.Log(error);ShowFeedback("挂绳操作未完成");}};menu.Items.Add(mount);
-                if(edit!=null){var change=new MenuItem{Header="添加图片 / 编辑文字…"};change.Click+=delegate{edit(item);};menu.Items.Add(change);}
+                if(edit!=null){var change=new MenuItem{Header="添加图片 / 编辑文字…"};change.Click+=delegate{if(SaveDetails())edit(item);};menu.Items.Add(change);}
                 menu.PlacementTarget=List;menu.IsOpen=true;e.Handled=true;
             };
-            Grid.SetRow(tools,2);body.Children.Add(tools);
+            foreach(var button in tools.Children.OfType<Button>()) button.Margin=new Thickness(0,0,8,0);
+            actionBar.Children.Add(tools);
             feedbackTimer.Tick += delegate { feedback.Text = ""; feedbackTimer.Stop(); };
             SourceInitialized += delegate { Position(); };
             shelf.SizeChanged += ShelfMoved; shelf.LocationChanged += ShelfMoved; shelf.RopeHidden += Close;
@@ -209,8 +240,8 @@ namespace ScreenLine
             var area = shelf.Display.WorkingArea;
             double dpi = WindowsNative.MonitorScale(shelf.Display);
             var anchor = shelf.TextAnchor;
-            Width = Math.Min(460, area.Width / dpi - 16);
-            Height = Math.Min(456, Math.Max(180, (area.Bottom - Math.Max(area.Top, anchor.Y)) / dpi - 8));
+            Width = Math.Min(960, area.Width / dpi - 32);
+            Height = Math.Min(620, Math.Max(240, (area.Bottom - Math.Max(area.Top, anchor.Y)) / dpi - 16));
             double left = Math.Max(area.Left + 8 * dpi, Math.Min(area.Right - (Width + 8) * dpi, anchor.X - (Width - 76) * dpi));
             double top = Math.Max(area.Top + 4 * dpi, Math.Min(area.Bottom - Height * dpi, anchor.Y));
             pointer.Margin = new Thickness(Math.Max(30, Math.Min(Width - 54, (anchor.X - left) / dpi - 12)), 0, 0, 0);
@@ -221,6 +252,8 @@ namespace ScreenLine
         void Refresh()
         {
             if (closed) return;
+            if (savingDetail) { count.Text = texts.Items.Count.ToString(); return; }
+            if (!SaveDetails()) return;
             var selected = List.SelectedItem;
             var scroll = FindScroll(List);
             double offset = scroll == null ? 0 : scroll.VerticalOffset;
@@ -229,8 +262,9 @@ namespace ScreenLine
             var visible = texts.Items.Where(item => item.Content.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) >= 0).ToArray();
             foreach (var item in texts.Items.Except(visible)) item.IsMarked = false;
             List.ItemsSource = visible;
+            List.SelectedItem = visible.Contains(selected as TextItem) ? selected : visible.FirstOrDefault();
             refreshing = false; UpdateBatch();
-            List.SelectedItem = selected;
+            LoadDetails(List.SelectedItem as TextItem);
             count.Text = texts.Items.Count.ToString();
             empty.Text = texts.Items.Count == 0 ? texts.CollectClipboard
                 ? "还没有文字\n复制的文字会自动出现在这里"
@@ -286,6 +320,7 @@ namespace ScreenLine
             var item = button.DataContext as TextItem;
             if (item == null) return;
             e.Handled = true;
+            if ((string)button.Tag != "delete" && !SaveDetails()) return;
             button.IsEnabled = false;
             try
             {

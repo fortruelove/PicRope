@@ -82,6 +82,15 @@ namespace ScreenLine
         double PhotoWidth { get { return Math.Max(1, (ActualWidth > 0 ? ActualWidth : Width) - 48 - AccessoryWidth); } }
         double LineWidth { get { return PhotoWidth + AccessoryWidth; } }
         double ScrollLimit { get { return Math.Max(0, content.Width - PhotoWidth); } }
+        internal Point BasketAnchor
+        {
+            get
+            {
+                var point = basketCount.PointToScreen(new Point(basketCount.ActualWidth / 2, basketCount.ActualHeight + 4));
+                point.Y -= slide.Y * WindowsNative.MonitorScale(Display);
+                return point;
+            }
+        }
         internal Point TextAnchor
         {
             get
