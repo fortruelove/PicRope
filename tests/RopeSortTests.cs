@@ -23,7 +23,7 @@ namespace ScreenLine.Tests
                 var store = new StateStore(root); var gallery = new Gallery(store); var texts = new TextCollection(store);
                 var first = texts.Add("第一条文字"); var second = texts.Add("第二条文字");
                 shelf = new ShelfWindow(gallery, delegate { }, delegate { }); texts.Changed += shelf.Update;
-                shelf.Show(); shelf.Reveal(true, true, 60); shelf.UpdateLayout();
+                shelf.Show(); ((System.Windows.Threading.DispatcherTimer)Field(shelf, "pointer")).Stop(); shelf.Reveal(true, true, 60); shelf.UpdateLayout();
                 var viewport = (ScrollViewer)Field(shelf, "viewport"); var content = (Canvas)Field(shelf, "content");
                 var rope = (System.Windows.Shapes.Path)Field(shelf, "rope");
                 var original = store.State.CardOrder.ToArray();
@@ -54,7 +54,7 @@ namespace ScreenLine.Tests
                 window.DeleteSelectedButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 Check(!texts.Items.Contains(first) && !gallery.Hanging.Any(i => i.Text == first), "文字批量删除一次点击完成并同步卡片"); window.Close();
                 Check(AppUpdates.Repository == "https://github.com/fortruelove/PicRope" && AppUpdates.Endpoint == "https://api.github.com/repos/fortruelove/PicRope/releases/latest", "更新检查和下载白名单使用自己的仓库");
-                Check(AppUpdates.CurrentVersion == "1.2.5", "发布版本为 1.2.5");
+                Check(AppUpdates.CurrentVersion == "1.2.6", "发布版本为 1.2.6");
                 Console.WriteLine("绳子排序测试：{0} 通过，0 失败", count);
             }
             catch (Exception error) { Console.WriteLine(error); Environment.ExitCode = 1; }

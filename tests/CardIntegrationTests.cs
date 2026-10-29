@@ -35,7 +35,15 @@ await c.AcceptCard(combined);Check(c.Gallery.Collected.Count==1 && c.Texts.Items
 c.Shelf.Update();c.Shelf.Reveal(true,true,0); await Task.Delay(180);
 Render((FrameworkElement)c.Shelf.Content,"rope.png");
 var editor=new CardEditorWindow(c.Gallery,c.Gallery.Collected[0],false){Owner=c.Shelf};editor.Show();await Task.Delay(100);Render((FrameworkElement)editor.Content,"editor.png");editor.Close();
-c.ShowBasket();await Task.Delay(180);Check(Find(c.Basket,"粘贴图片") && Find(c.Basket,"关联 / 编辑图文…"),"篮子提供粘贴和关联入口");Render((FrameworkElement)c.Basket.Content,"basket.png");c.Basket.Close();
+c.ShowBasket();await Task.Delay(180);Check(Find(c.Basket,"粘贴图片") && Find(c.Basket,"关联 / 编辑图文…"),"篮子提供粘贴和关联入口");
+c.ShowBasket();Check(c.Basket==null && !c.Shelf.ChoosingBasket,"再次点击篮子入口关闭弹出层");
+c.ShowBasket();await Task.Delay(180);
+var basketOrigin=c.Basket.PointToScreen(new Point());var basketArea=c.Shelf.Display.WorkingArea;
+Check(basketOrigin.X>=basketArea.Left && basketOrigin.X+c.Basket.ActualWidth*WindowsNative.MonitorScale(c.Shelf.Display)<=basketArea.Right+1 && basketOrigin.Y>=c.Shelf.BasketAnchor.Y-1,"篮子在自身入口下方弹出且保持屏幕内");
+c.ShowTexts();await Task.Delay(120);Check(c.Basket==null && c.TextWindow!=null,"打开其他面板时篮子失去焦点自动关闭");c.TextWindow.Close();
+c.ShowBasket();await Task.Delay(120);
+Render((FrameworkElement)c.Basket.Content,"basket.png");
+c.Shelf.Reveal(false,false,0);Check(c.Basket==null && !c.Shelf.ChoosingBasket,"绳子收起时篮子弹出层同步关闭");c.Shelf.Reveal(true,true,0);
 c.ShowTexts();await Task.Delay(150);Check(Find(c.TextWindow,"粘贴文字") && Find(c.TextWindow,"挂上绳子") && Find(c.TextWindow,"新文字自动上绳"),"信封提供粘贴、自动上绳和手动挂绳");Render((FrameworkElement)c.TextWindow.Content,"texts.png");c.TextWindow.Close();
 var original=c.Gallery.Collected[0];c.Gallery.Split(original,c.Texts);Check(c.Texts.Items.Count==2 && c.Gallery.Hanging.Count==3,"组合卡片拆分后两个内容均保留");
 var note=c.Texts.Items.First(t=>t.Content==combined.Text);c.Gallery.AttachText(original,note,false,false);Check(c.Texts.Items.Count==1 && c.Gallery.Note(original)==combined.Text,"已有文字重新关联图片");

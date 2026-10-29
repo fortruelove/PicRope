@@ -120,7 +120,12 @@ namespace ScreenLine
     internal sealed class TextItem : System.ComponentModel.INotifyPropertyChanged
     {
         public string Id { get; set; }
-        public string Content { get; set; }
+        string content;
+        public string Content
+        {
+            get { return content; }
+            set { if (content == value) return; content = value; if (PropertyChanged != null) PropertyChanged(this, new System.ComponentModel.PropertyChangedEventArgs("Content")); }
+        }
         public DateTime CreatedUtc { get; set; }
         public bool Hanging { get; set; }
         bool marked;
@@ -140,6 +145,18 @@ namespace ScreenLine
         public event Action Changed;
 
         public TextCollection(StateStore store) { Store = store; }
+
+        public void UpdateContent(TextItem item, string content)
+        {
+            if (!Items.Contains(item)) throw new InvalidOperationException("文字已被移除，无法保存。");
+            content = content ?? "";
+            if (item.Content == content) return;
+            string previous = item.Content;
+            item.Content = content;
+            try { Store.Save(); }
+            catch { item.Content = previous; throw; }
+            Notify();
+        }
 
         public bool AutoHang { get { return Store.State.AutoTextHang; } set { bool old = AutoHang; Store.State.AutoTextHang = value; try { Store.Save(); } catch { Store.State.AutoTextHang = old; throw; } Notify(); } }
         public void Notify() { if (Changed != null) Changed(); }

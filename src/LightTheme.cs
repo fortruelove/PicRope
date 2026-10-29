@@ -11,6 +11,14 @@ namespace ScreenLine
     {
         static readonly ResourceDictionary styles = (ResourceDictionary)XamlReader.Parse(@"
 <ResourceDictionary xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' xmlns:x='http://schemas.microsoft.com/winfx/2006/xaml'>
+  <ControlTemplate x:Key='AutoHangSwitch' TargetType='CheckBox'>
+    <Border x:Name='Track' Width='38' Height='22' CornerRadius='11' Background='#B8C0CC' BorderBrush='Transparent' BorderThickness='1'>
+      <Border x:Name='Knob' Width='16' Height='16' CornerRadius='8' Background='White' HorizontalAlignment='Left' Margin='2,0'/>
+    </Border><ControlTemplate.Triggers>
+      <Trigger Property='IsChecked' Value='True'><Setter TargetName='Track' Property='Background' Value='#2463AE'/><Setter TargetName='Knob' Property='HorizontalAlignment' Value='Right'/></Trigger>
+      <Trigger Property='IsKeyboardFocused' Value='True'><Setter TargetName='Track' Property='BorderBrush' Value='#283343'/></Trigger>
+    </ControlTemplate.Triggers>
+  </ControlTemplate>
   <Style x:Key='Action' TargetType='Button'>
     <Setter Property='FontFamily' Value='Microsoft YaHei UI'/><Setter Property='FontSize' Value='13'/>
     <Setter Property='Foreground' Value='#343D49'/><Setter Property='Background' Value='White'/>
@@ -45,6 +53,7 @@ namespace ScreenLine
 </ResourceDictionary>");
 
         public static Style ButtonStyle { get { return (Style)styles["Action"]; } }
+        public static ControlTemplate AutoHangSwitchTemplate { get { return (ControlTemplate)styles["AutoHangSwitch"]; } }
         public static Style HintStyle { get { return (Style)styles["Hint"]; } }
         public static SolidColorBrush Brush(string value) { return (SolidColorBrush)new BrushConverter().ConvertFromString(value); }
         public static void Install(Application app)

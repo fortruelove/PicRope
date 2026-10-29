@@ -130,8 +130,8 @@ namespace ScreenLine.Tests
             var longItem = controller.Texts.Add(string.Join("\n", Enumerable.Repeat("长文字完整保留，可以选中阅读并复制原文。", 200)));
             window.List.SelectedItem = longItem; window.UpdateLayout();
             var longRow = (ListBoxItem)window.List.ItemContainerGenerator.ContainerFromIndex(0);
-            var reader = Children<TextBox>(longRow).Single();
-            Check(reader.IsVisible && reader.ActualHeight <= 220.1 && reader.Text == longItem.Content, "选中长文字可在行内滚动阅读，不撑坏整个面板");
+            var reader = window.DetailEditor;
+            Check(reader.IsVisible && reader.ActualHeight < window.ActualHeight && reader.Text == longItem.Content && !Children<TextBox>(longRow).Any(), "选中长文字在右侧滚动阅读，左侧不展开");
 
             controller.Texts.Remove(longItem);
             controller.Texts.Add("会议链接和参考资料：https://example.com/notes");
@@ -318,7 +318,7 @@ namespace ScreenLine.Tests
                 await Click(choices[0]);
                 Check(controller.Texts.Items.All(item => !item.IsMarked) && !window.DeleteSelectedButton.IsEnabled, "真实鼠标再次点击可取消单条选择");
                 await Click(Children<TextBlock>(rows[1]).First());
-                Check(rows[1].IsSelected && Children<TextBox>(rows[1]).Single().IsVisible, "点击正文仍可展开全文阅读");
+                Check(rows[1].IsSelected && window.DetailEditor.IsVisible && window.DetailEditor.Text == ((TextItem)rows[1].DataContext).Content, "点击正文在右侧显示完整详情");
                 SetCursorPos(area.Left + 20, area.Bottom - 20); await Task.Delay(60);
                 Check(((Border)choices[1].Template.FindName("Mark", choices[1])).Opacity == 1, "点击激活的条目移开鼠标后仍显示选择框");
                 await Click(choices[1]);
