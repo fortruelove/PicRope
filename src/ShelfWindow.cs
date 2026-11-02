@@ -834,7 +834,7 @@ namespace ScreenLine
             close.VerticalAlignment = VerticalAlignment.Top;
             close.Focusable = false;
             close.Opacity = 0;
-            close.ToolTip = item.IsText ? "删除文字卡片" : "删除图片和备注（图片移到回收站）";
+            close.ToolTip = item.IsText ? "删除文字卡片" : "删除图片和备注";
             close.Click += delegate { act(ShotAction.Trash, item); };
             imageLayer.Children.Add(close);
             Surface.Child = imageLayer;

@@ -18,9 +18,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("PicRope · 图绳")]
 [assembly: AssemblyProduct("PicRope")]
 [assembly: AssemblyDescription("图绳：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.2.7.0")]
-[assembly: AssemblyFileVersion("1.2.7.0")]
-[assembly: AssemblyInformationalVersion("1.2.7")]
+[assembly: AssemblyVersion("1.2.8.0")]
+[assembly: AssemblyFileVersion("1.2.8.0")]
+[assembly: AssemblyInformationalVersion("1.2.8")]
 
 namespace ScreenLine
 {
@@ -95,6 +95,10 @@ namespace ScreenLine
             else Notice("Ctrl+Alt+T 已被占用，可点击托盘图标打开。");
             TrayMenu.OnAction(TrayMenu.BasketButton, ShowBasket);
             TrayMenu.OnAction(TrayMenu.TextButton, ShowTexts);
+            TrayMenu.OnToggle(TrayMenu.ArchiveDeleted, store.State.ArchiveDeleted, delegate(bool value) {
+                bool previous=store.State.ArchiveDeleted; store.State.ArchiveDeleted=value;
+                try {store.Save();} catch(Exception error) {store.State.ArchiveDeleted=previous;TrayMenu.ArchiveDeleted.IsChecked=previous;store.Log(error);Notice("归档设置保存失败，请重试。");}
+            });
             autoHang = TrayMenu.AutoHang;
             TrayMenu.OnToggle(autoHang, Captures.AutoHang, delegate(bool value) { if (Captures.AutoHang != value) Captures.AutoHang = value; });
             Gallery.Changed += SyncAutoHang;
@@ -134,6 +138,10 @@ namespace ScreenLine
             {
                 try { WindowsShell.OpenInbox(store); }
                 catch (Exception error) { store.Log(error); Notice("无法打开收集文件夹：" + error.Message); }
+            });
+            more.AddAction("打开归档日志", "folder", delegate {
+                try { Directory.CreateDirectory(store.ArchiveRoot); Process.Start("explorer.exe", Quote(store.ArchiveRoot)); }
+                catch(Exception error) { store.Log(error); Notice("无法打开归档目录：" + error.Message); }
             });
             more.AddAction("全部取下（保留文件）", "clear", delegate { Gallery.Clear(); Texts.SetHanging(Texts.Items.ToArray(),false); });
             more.Separator();
@@ -488,11 +496,8 @@ namespace ScreenLine
                         Gallery.Remove(item);
                         break;
                     case ShotAction.Trash:
-                        FileSystem.DeleteFile(item.Path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
+                        Gallery.DeleteCard(item);
                         Shelf.ShowDiscard(item);
-                        Gallery.Remove(item);
-                        Gallery.Prune();
-                        Gallery.Store.State.ImageNotes.Remove(item.Path); Gallery.Store.Save();
                         break;
                 }
             }

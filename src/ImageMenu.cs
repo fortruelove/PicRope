@@ -74,7 +74,7 @@ namespace ScreenLine
             panel.Children.Add(Action("仅移除图片（保留原文件）", "trash", ShotAction.RemovePicture, execute));
             panel.Children.Add(new Border { Height = 1, Background = LightTheme.Brush("#E8EBEF"), Margin = new Thickness(6, 4, 6, 4) });
             panel.Children.Add(Action("取下放篮子", "folder", ShotAction.Remove, execute));
-            panel.Children.Add(Action("移到回收站", "trash", ShotAction.Trash, execute));
+            panel.Children.Add(Action("删除图片", "trash", ShotAction.Trash, execute));
             var surface = LightTheme.Card(panel); surface.Padding = new Thickness(4);
             Items.Add(surface);
             var content = new FrameworkElementFactory(typeof(ContentPresenter));
@@ -101,7 +101,7 @@ namespace ScreenLine
 
         internal void SetCard(bool text, bool note) {
             SetLabel(ShotAction.Remove, text ? "取下放信封" : "取下放篮子");
-            SetLabel(ShotAction.Trash, text ? "删除文字" : note ? "删除图片和备注" : "移到回收站");
+            SetLabel(ShotAction.Trash, text ? "删除文字" : note ? "删除图片和备注" : "删除图片");
             SetLabel(ShotAction.Edit, text ? "编辑文字 / 添加配图…" : "编辑图片");
             foreach (var action in new[] { ShotAction.Save, ShotAction.Locate, ShotAction.CopyBoth, ShotAction.Split, ShotAction.RemoveNote, ShotAction.RemovePicture })
                 Actions[action].Visibility = text || (!note && action != ShotAction.Save && action != ShotAction.Locate) ? Visibility.Collapsed : Visibility.Visible;

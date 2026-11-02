@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -60,7 +60,7 @@ bool confirmation=false;
 var guard=new System.Windows.Threading.DispatcherTimer {Interval=TimeSpan.FromMilliseconds(100)};
 guard.Tick+=delegate{var dialog=FindWindow(null,"删除内容卡片");if(dialog!=IntPtr.Zero){confirmation=true;SendMessage(dialog,0x0111,new IntPtr(7),IntPtr.Zero);}};
 guard.Start();try{c.Act(ShotAction.Trash,deletion);}finally{guard.Stop();}
-Check(!confirmation && !File.Exists(deletion.Path) && !c.Gallery.Collected.Contains(deletion) && !new StateStore(root).State.ImageNotes.ContainsKey(deletion.Path),"图文组合删除不弹确认框，图片进回收站并清除备注");
+Check(!confirmation && !File.Exists(deletion.Path) && !c.Gallery.Collected.Contains(deletion) && !new StateStore(root).State.ImageNotes.ContainsKey(deletion.Path),"图文组合删除不弹确认框，图片永久删除并清除备注");
 Console.WriteLine("卡片集成测试："+passed+" 通过，0 失败");
 }catch(Exception error){Console.WriteLine("失败："+error);Environment.ExitCode=1;}finally{if(c!=null)c.Dispose();app.Shutdown(Environment.ExitCode);}};
 app.Run();
