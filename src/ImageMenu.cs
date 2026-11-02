@@ -30,6 +30,10 @@ namespace ScreenLine
 </Style>");
 
         readonly TextBlock details;
+        internal static readonly string[] CardPalette = { "#F3EBD5", "#E3EDDF", "#E1EBF3", "#EBE4F1", "#F2E2E1", "#EBC6C3" };
+        internal static readonly string[] CardColorNames = { "米黄", "浅绿", "雾蓝", "淡紫", "柔粉", "浅红" };
+        internal Action<int> ChooseColor;
+        internal readonly Button[] ColorButtons = new Button[CardPalette.Length];
         internal readonly Dictionary<ShotAction, Button> Actions = new Dictionary<ShotAction, Button>();
 
         internal ImageMenu(Action<ShotAction> execute)
@@ -44,6 +48,20 @@ namespace ScreenLine
             heading.Children.Add(new TextBlock { Text = "图片", FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = LightTheme.Brush("#536172") });
             details = new TextBlock { FontSize = 11, Foreground = LightTheme.Brush("#65717F"), HorizontalAlignment = HorizontalAlignment.Right };
             heading.Children.Add(details); panel.Children.Add(heading);
+            panel.Children.Add(new TextBlock { Text = "卡片背景色", Margin = new Thickness(10, 2, 10, 4), FontSize = 11 });
+            var colors = new Grid { Margin = new Thickness(10, 0, 10, 6) };
+            for (int n = 0; n < 3; n++) colors.ColumnDefinitions.Add(new ColumnDefinition());
+            for (int n = 0; n < 2; n++) colors.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            for (int n = 0; n < CardPalette.Length; n++) {
+                int color = n;
+                var button = new Button { Content = CardColorNames[n], MinWidth = 0, Height = 28, Margin = new Thickness(0, 0, n % 3 == 2 ? 0 : 4, 4), Background = LightTheme.Brush(CardPalette[n]), Foreground = LightTheme.Brush("#394452"), BorderBrush = LightTheme.Brush("#CDD3DB"), BorderThickness = new Thickness(1), ToolTip = "背景色：" + CardColorNames[n] };
+                button.Template = (ControlTemplate)XamlReader.Parse("<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Button'><Border Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}' CornerRadius='5'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Center'/></Border></ControlTemplate>");
+                AutomationProperties.SetName(button, "卡片背景色 " + CardColorNames[n]);
+                Grid.SetColumn(button, n % 3); Grid.SetRow(button, n / 3);
+                button.Click += delegate { IsOpen = false; if (ChooseColor != null) ChooseColor(color); };
+                ColorButtons[n] = button; colors.Children.Add(button);
+            }
+            panel.Children.Add(colors);
             panel.Children.Add(Action("打开", "open", ShotAction.Open, execute));
             panel.Children.Add(Action("编辑", "edit", ShotAction.Edit, execute));
             panel.Children.Add(Action("保存副本…", "save", ShotAction.Save, execute));

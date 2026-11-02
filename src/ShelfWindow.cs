@@ -299,6 +299,10 @@ namespace ScreenLine
                 if (!cards.TryGetValue(item.Path, out card))
                 {
                     card = new ShotCard(item, act);
+                    card.ChooseBackground = delegate(int color) {
+                        try { gallery.Store.SetCardColor(item.Path, color); gallery.Notify(); }
+                        catch (Exception error) { gallery.Store.Log(error); new LightNotice("背景色保存失败，请重试。").Show(); }
+                    };
                     card.RopeDrag = DragForSorting;
                     var hovered = card;
                     card.Surface.MouseEnter += delegate { Preview.Enter(hovered); };
@@ -312,6 +316,7 @@ namespace ScreenLine
                     content.Children.Add(card);
                 }
                 bool changed = card.UpdateImage();
+                card.SetBackground(gallery.Store.CardColor(item.Path));
                 PinnedImageWindow pinnedImage;
                 if (changed && pins.TryGetValue(item.Path, out pinnedImage)) pinnedImage.UpdateImage();
             }
@@ -790,6 +795,12 @@ namespace ScreenLine
         public readonly double Tilt;
         public LineTheme Appearance { get; private set; }
         public int ColorIndex { get; private set; }
+        internal Action<int> ChooseBackground;
+        internal void SetBackground(int color)
+        {
+            Surface.Background = LightTheme.Brush(ImageMenu.CardPalette[color]);
+            for (int n = 0; n < ImageMenu.CardPalette.Length; n++) menu.ColorButtons[n].BorderThickness = new Thickness(n == color ? 2 : 1);
+        }
         internal double MountX { get { return xMotion.Target; } }
 
         public ShotCard(CaptureItem item, Action<ShotAction, CaptureItem> act)
@@ -872,6 +883,7 @@ namespace ScreenLine
             Surface.LostMouseCapture += delegate { hold.Stop(); pressed = false; };
             hold.Tick += delegate { hold.Stop(); held = true; pressed = false; Surface.ReleaseMouseCapture(); act(ShotAction.Edit, item); };
             menu = new ImageMenu(delegate(ShotAction action) { act(action, Item); });
+            menu.ChooseColor = delegate(int color) { if (ChooseBackground != null) ChooseBackground(color); };
             Surface.MouseRightButtonUp += delegate(object sender, MouseButtonEventArgs e)
             {
                 e.Handled = true;

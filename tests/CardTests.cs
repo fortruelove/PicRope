@@ -53,6 +53,22 @@ using(var locked=new FileStream(Path.Combine(root,"state.json"),FileMode.Open,Fi
 bool threw=false;try{gallery.Reorder("text:"+tail.Id,0,ordered,true);}catch(IOException){threw=true;}
 Check(threw && gallery.Hanging.Select(i=>i.Path).SequenceEqual(ordered),"排序保存失败整体回滚");
 }
+var colorsRoot=Path.Combine(root,"colors"); var colorsStore=new StateStore(colorsRoot); var colorsTexts=new TextCollection(colorsStore);
+var colorsGallery=new Gallery(colorsStore);
+var colorKeys=Enumerable.Range(0,7).Select(n=>"text:"+colorsTexts.Create("color "+n).Id).ToArray();
+Check(colorKeys.Select(k=>colorsStore.CardColor(k)).SequenceEqual(new[]{0,1,2,3,4,5,0}),"新卡片默认颜色按六色循环分配");
+colorsStore.SetCardColor(colorKeys[0],4);
+colorsGallery.Reorder(colorKeys[6],0,colorKeys,true);
+Check(colorsStore.CardColor(colorKeys[0])==4 && colorsStore.CardColor(colorKeys[6])==0,"手动选色及默认颜色排序后保持不变");
+var colorRestart=new StateStore(colorsRoot);
+Check(colorKeys.All(k=>colorRestart.CardColor(k)==colorsStore.CardColor(k)),"所有卡片颜色重启后保持");
+Check(colorsStore.CardColor("text:"+colorsTexts.Create("next color").Id)==1,"手动选色不影响默认颜色轮换");
+using(var locked=new FileStream(Path.Combine(colorsRoot,"state.json"),FileMode.Open,FileAccess.Read,FileShare.None)) {
+bool failed=false;try{colorsStore.SetCardColor(colorKeys[0],2);}catch(IOException){failed=true;}
+Check(failed && colorsStore.CardColor(colorKeys[0])==4,"选色保存失败恢复原颜色");
+}
+var legacyColors=legacy.CardColor("text:old"); legacy.Save();
+Check(new StateStore(old).CardColor("text:old")==legacyColors,"旧数据一次性补齐颜色并持久保存");
 Console.WriteLine("卡片测试全部通过");
 }
 }}

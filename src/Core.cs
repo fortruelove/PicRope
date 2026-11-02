@@ -50,6 +50,8 @@ namespace ScreenLine
         public bool AutoTextHang { get; set; }
         public Dictionary<string, string> ImageNotes { get; set; }
         public List<string> CardOrder { get; set; }
+        public Dictionary<string, int> CardColors { get; set; }
+        public int NextCardColor { get; set; }
         public List<string> DetachedPictures { get; set; }
         public bool AutoHang { get; set; }
         public bool HoverPreview { get; set; }
@@ -102,11 +104,41 @@ namespace ScreenLine
 
         public void Save()
         {
+            InitializeCardColors();
             RuntimeLog.Write("Saving application state");
             Directory.CreateDirectory(Root);
             string temporary = file + ".tmp";
             File.WriteAllText(temporary, serializer.Serialize(State), new UTF8Encoding(false));
             FileRules.Commit(temporary, file);
+        }
+
+        public void InitializeCardColors()
+        {
+            if (State.CardColors == null) State.CardColors = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var key in State.CardOrder.Concat(State.Collection).Concat(State.Images).Concat(State.Texts.AsEnumerable().Reverse().Select(t => "text:" + t.Id)).Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                int value;
+                if (State.CardColors.TryGetValue(key, out value) && value >= 0 && value < 6) continue;
+                State.CardColors[key] = ((State.NextCardColor % 6) + 6) % 6;
+                State.NextCardColor = (State.CardColors[key] + 1) % 6;
+            }
+        }
+
+        public int CardColor(string key)
+        {
+            InitializeCardColors();
+            int value;
+            return State.CardColors.TryGetValue(key, out value) ? value : 0;
+        }
+
+        public void SetCardColor(string key, int color)
+        {
+            if (color < 0 || color >= 6) throw new ArgumentOutOfRangeException("color");
+            InitializeCardColors();
+            int previous; bool existed = State.CardColors.TryGetValue(key, out previous);
+            State.CardColors[key] = color;
+            try { Save(); }
+            catch { if (existed) State.CardColors[key] = previous; else State.CardColors.Remove(key); throw; }
         }
 
         public void Log(Exception error)
