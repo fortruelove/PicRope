@@ -1,0 +1,30 @@
+name: Delete explicitly approved v1.2.85
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/delete-1.2.85.yml]
+permissions:
+  contents: read
+jobs:
+  delete-only-1-2-85:
+    if: >-
+      github.repository == 'fortruelove/PicRope' && github.event.head_commit.message == 'chore: delete approved v1.2.85 release and tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Verify exact release and tag then delete only v1.2.85
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo=fortruelove/PicRope
+          release_id=$(gh api "repos/$repo/releases/tags/v1.2.85" --jq '.id')
+          test "$release_id" = "432352667"
+          tag_sha=$(gh api "repos/$repo/git/ref/tags/v1.2.85" --jq '.object.sha')
+          test "$tag_sha" = "d574a6bf83d76542dec7ec42bf6bf7397cb75d04"
+          gh api --method DELETE "repos/$repo/releases/432352667"
+          gh api --method DELETE "repos/$repo/git/refs/tags/v1.2.85"
+          gh release view v1.2.9 --repo "$repo"
