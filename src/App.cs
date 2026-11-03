@@ -18,9 +18,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("PicRope · 图绳")]
 [assembly: AssemblyProduct("PicRope")]
 [assembly: AssemblyDescription("图绳：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.2.85.0")]
-[assembly: AssemblyFileVersion("1.2.85.0")]
-[assembly: AssemblyInformationalVersion("1.2.85")]
+[assembly: AssemblyVersion("1.2.9.0")]
+[assembly: AssemblyFileVersion("1.2.9.0")]
+[assembly: AssemblyInformationalVersion("1.2.9")]
 
 namespace ScreenLine
 {
@@ -97,7 +97,7 @@ namespace ScreenLine
             TrayMenu.OnAction(TrayMenu.TextButton, ShowTexts);
             TrayMenu.OnToggle(TrayMenu.ArchiveDeleted, store.State.ArchiveDeleted, delegate(bool value) {
                 bool previous=store.State.ArchiveDeleted; store.State.ArchiveDeleted=value;
-                try {store.Save();} catch(Exception error) {store.State.ArchiveDeleted=previous;TrayMenu.ArchiveDeleted.IsChecked=previous;store.Log(error);Notice("归档设置保存失败，请重试。");}
+                try {store.Save();store.NotifyArchiveSettings();} catch(Exception error) {store.State.ArchiveDeleted=previous;TrayMenu.ArchiveDeleted.IsChecked=previous;store.Log(error);Notice("归档设置保存失败，请重试。");}
             });
             autoHang = TrayMenu.AutoHang;
             TrayMenu.OnToggle(autoHang, Captures.AutoHang, delegate(bool value) { if (Captures.AutoHang != value) Captures.AutoHang = value; });

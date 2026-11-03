@@ -1,4 +1,4 @@
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -214,7 +214,7 @@ namespace ScreenLine
                 tools.Children.Add(LightTheme.Button("粘贴文字",async delegate {if(SaveDetails())ShowFeedback(await paste());}));
                 PreviewKeyDown+=async delegate(object sender,KeyEventArgs e){if(e.Key==Key.V && Keyboard.Modifiers==ModifierKeys.Control && Keyboard.FocusedElement != Search && !DetailEditor.IsKeyboardFocusWithin){e.Handled=true;if(SaveDetails())ShowFeedback(await paste());}};
             }
-            tools.Children.Add(LightTheme.Button("配图 / 编辑…",delegate {if(!SaveDetails())return;var item=List.SelectedItem as TextItem;if(item!=null && edit!=null)edit(item);else ShowFeedback("请先选择一条文字");},"quiet"));
+            tools.Children.Add(LightTheme.Button("配图 / 编辑…",delegate {if(!SaveDetails())return;var item=List.SelectedItem as TextItem;if(item!=null && edit!=null)edit(item);else ShowFeedback("请先选择一条文字");}));
             List.PreviewMouseRightButtonUp+=delegate(object sender,MouseButtonEventArgs e){
                 var element=e.OriginalSource as FrameworkElement; var item=element==null?null:element.DataContext as TextItem;
                 if(item==null)return; List.SelectedItem=item;

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -9,6 +9,7 @@ namespace ScreenLine
 {
     internal sealed partial class TextWindow
     {
+        internal ArchiveChoice ArchiveOption;
         internal readonly TextBox DetailEditor = new TextBox();
         readonly TextBlock detailTime = new TextBlock { FontSize = 12, Foreground = LightTheme.Brush("#8390A1"), VerticalAlignment = VerticalAlignment.Center };
         readonly TextBlock detailStatus = new TextBlock { Text = "选择左侧文字查看详情", FontSize = 12, Foreground = LightTheme.Brush("#65717F") };
@@ -21,6 +22,7 @@ namespace ScreenLine
             if (!SaveDetails()) return;
             Search.Text = "";
             refreshing = true; List.SelectedItem = null; refreshing = false;
+            ArchiveOption.SetKey(null);
             detailItem = null; creatingText = true; loadingDetail = true;
             DetailEditor.Text = ""; DetailEditor.IsEnabled = true;
             detailTime.Text = "新文字"; detailStatus.Text = "直接输入文字，内容将自动保存";
@@ -35,7 +37,11 @@ namespace ScreenLine
             panel.RowDefinitions.Add(new RowDefinition { Height = new GridLength(28) });
             var heading = new Grid();
             heading.Children.Add(new TextBlock { Text = "详情", FontSize = 15, FontWeight = FontWeights.SemiBold, Foreground = LightTheme.Brush("#283343"), VerticalAlignment = VerticalAlignment.Center });
-            detailTime.HorizontalAlignment = HorizontalAlignment.Right; heading.Children.Add(detailTime); panel.Children.Add(heading);
+            ArchiveOption = new ArchiveChoice(texts.Store, ShowFeedback);
+            var headingRight = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            detailTime.Margin = new Thickness(0, 0, 12, 0); headingRight.Children.Add(detailTime); headingRight.Children.Add(ArchiveOption);
+            heading.Children.Add(headingRight); panel.Children.Add(heading);
+            Closed += delegate { ArchiveOption.Dispose(); };
             DetailEditor.AcceptsReturn = true; DetailEditor.AcceptsTab = true; DetailEditor.TextWrapping = TextWrapping.Wrap;
             DetailEditor.VerticalScrollBarVisibility = ScrollBarVisibility.Auto; DetailEditor.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
             DetailEditor.Background = Brushes.Transparent; DetailEditor.BorderThickness = new Thickness(0); DetailEditor.Padding = new Thickness(14);
@@ -68,6 +74,7 @@ namespace ScreenLine
 
         void LoadDetails(TextItem item)
         {
+            ArchiveOption.SetKey(item == null ? null : "text:" + item.Id);
             if (detailItem == item && !creatingText) return;
             creatingText = false;
             detailItem = item; loadingDetail = true;

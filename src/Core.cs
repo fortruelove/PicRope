@@ -54,6 +54,7 @@ namespace ScreenLine
         public int NextCardColor { get; set; }
         public List<string> DetachedPictures { get; set; }
         public bool ArchiveDeleted { get; set; }
+        public Dictionary<string, bool> CardArchive { get; set; }
         public Dictionary<string, DateTime> CardCreatedUtc { get; set; }
         public bool AutoHang { get; set; }
         public bool HoverPreview { get; set; }
@@ -128,10 +129,27 @@ namespace ScreenLine
             return State.CardCreatedUtc.TryGetValue(path, out date) ? date : DateTime.UtcNow;
         }
         public string ArchiveRoot { get { return Path.Combine(Path.GetDirectoryName(Root), "归档"); } }
-        static readonly object archiveGate = new object();
-        public void Archive(string image, string text, DateTime created)
+        public event Action ArchiveSettingsChanged;
+        public void NotifyArchiveSettings() { if (ArchiveSettingsChanged != null) ArchiveSettingsChanged(); }
+        public bool ShouldArchive(string key)
         {
-            if (!State.ArchiveDeleted) return;
+            bool value;
+            return key != null && State.CardArchive != null && State.CardArchive.TryGetValue(key, out value) ? value : State.ArchiveDeleted;
+        }
+        public void SetCardArchive(string key, bool value)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            if (State.CardArchive == null) State.CardArchive = new Dictionary<string, bool>();
+            bool previous; bool existed = State.CardArchive.TryGetValue(key, out previous);
+            State.CardArchive[key] = value;
+            try { Save(); } catch { if (existed) State.CardArchive[key] = previous; else State.CardArchive.Remove(key); throw; }
+            NotifyArchiveSettings();
+        }
+
+        static readonly object archiveGate = new object();
+        public void Archive(string image, string text, DateTime created, string key = null)
+        {
+            if (!ShouldArchive(key)) return;
             lock (archiveGate) {
                 if (created == default(DateTime)) created = DateTime.UtcNow;
                 var local = created.ToLocalTime();
@@ -293,7 +311,7 @@ namespace ScreenLine
         {
             int index = Items.IndexOf(item);
             if (index < 0) return;
-            Store.Archive(null, item.Content, item.CreatedUtc);
+            Store.Archive(null, item.Content, item.CreatedUtc, "text:" + item.Id);
             Items.RemoveAt(index);
             try { Store.Save(); }
             catch { Items.Insert(index, item); throw; }
@@ -304,7 +322,7 @@ namespace ScreenLine
         {
             var ids = new HashSet<string>(selected.Select(item => item.Id));
             var previous = Items.ToArray();
-            foreach (var item in previous.Where(t => ids.Contains(t.Id))) Store.Archive(null, item.Content, item.CreatedUtc);
+            foreach (var item in previous.Where(t => ids.Contains(t.Id))) Store.Archive(null, item.Content, item.CreatedUtc, "text:" + item.Id);
             if (Items.RemoveAll(item => ids.Contains(item.Id)) == 0) return;
             try { Store.Save(); }
             catch { Items.Clear(); Items.AddRange(previous); throw; }
@@ -794,7 +812,7 @@ namespace ScreenLine
         }
         public void DeleteCard(CaptureItem item)
         {
-            Store.Archive(item.Path, Note(item), Store.CardCreated(item.Path));
+            Store.Archive(item.Path, Note(item), Store.CardCreated(item.Path), item.Path);
             File.Delete(item.Path);
             ChangeCards(delegate { Items.Remove(item); Collected.Remove(item); Store.State.ImageNotes.Remove(item.Path); Store.State.CardOrder.Remove(item.Path); });
         }

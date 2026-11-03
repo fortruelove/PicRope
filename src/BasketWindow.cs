@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -77,6 +77,7 @@ namespace ScreenLine
         internal readonly Button PendingTab, AllTab, HangButton, DeleteButton, SelectAllButton;
         internal readonly CheckBox AutoHang;
         bool pendingOnly = true, refreshing, mounting, closed;
+        internal readonly ArchiveChoice ArchiveOption;
         CaptureItem previewItem;
         ImageContent previewContent;
         int previewVersion;
@@ -141,7 +142,7 @@ namespace ScreenLine
                 pasteButton.Margin=new Thickness(12,0,0,0); tabs.Children.Add(pasteButton);
                 PreviewKeyDown+=async delegate(object sender,KeyEventArgs e) {if(e.Key==Key.V && Keyboard.Modifiers==ModifierKeys.Control){e.Handled=true;status.Text=await paste();}};
             }
-            tabs.Children.Add(LightTheme.Button("关联 / 编辑图文…",delegate {var item=gallery.Collected.FirstOrDefault(i=>selected.Contains(i.Path)) ?? previewItem; if(item!=null)act(ShotAction.CardEdit,item);},"quiet"));
+            tabs.Children.Add(LightTheme.Button("关联 / 编辑图文…",delegate {var item=gallery.Collected.FirstOrDefault(i=>selected.Contains(i.Path)) ?? previewItem; if(item!=null)act(ShotAction.CardEdit,item);}));
             var tabBar = new Border { BorderBrush = LightTheme.Brush("#E8EBEF"), BorderThickness = new Thickness(0, 0, 0, 1), Child = tabs };
             Grid.SetRow(tabBar, 1); body.Children.Add(tabBar);
 
@@ -156,7 +157,11 @@ namespace ScreenLine
             previewBody.RowDefinitions.Add(new RowDefinition { Height = new GridLength(28) });
             previewBody.RowDefinitions.Add(new RowDefinition());
             previewBody.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-            previewBody.Children.Add(new TextBlock { Text = "预览", Margin = new Thickness(16, 10, 0, 0), FontSize = 12, Foreground = LightTheme.Brush("#65717F") });
+            var previewHeading = new Grid { Margin = new Thickness(16, 0, 16, 0) };
+            previewHeading.Children.Add(new TextBlock { Text = "预览", VerticalAlignment = VerticalAlignment.Center, FontSize = 12, Foreground = LightTheme.Brush("#65717F") });
+            ArchiveOption = new ArchiveChoice(gallery.Store, delegate(string message) { status.Text = message; });
+            ArchiveOption.HorizontalAlignment = HorizontalAlignment.Right; previewHeading.Children.Add(ArchiveOption); previewBody.Children.Add(previewHeading);
+            Closed += delegate { ArchiveOption.Dispose(); };
             Grid.SetRow(preview, 1); previewBody.Children.Add(preview);
             Grid.SetRow(previewHint, 1); previewBody.Children.Add(previewHint);
             Grid.SetRow(metadata, 2); previewBody.Children.Add(metadata);
@@ -186,7 +191,7 @@ namespace ScreenLine
             DeleteButton.HorizontalAlignment = HorizontalAlignment.Right; DeleteButton.VerticalAlignment = VerticalAlignment.Center;
             DeleteButton.Margin = new Thickness(0, 0, 12, 0); DeleteButton.Foreground = LightTheme.Brush("#B74E4A");
             DeleteButton.Background = LightTheme.Brush("#FFF8F7"); DeleteButton.BorderBrush = LightTheme.Brush("#ECD6D2");
-            DeleteButton.ToolTip = "移到回收站，可恢复";
+            DeleteButton.ToolTip = "按每条备忘的归档设置删除";
             AutomationProperties.SetName(DeleteButton, "删除所选图片"); Grid.SetColumn(DeleteButton, 2); footer.Children.Add(DeleteButton);
             HangButton = LightTheme.Button("挂上绳子", Mount, "primary"); HangButton.Width = 144; HangButton.Height = 38;
             HangButton.HorizontalAlignment = HorizontalAlignment.Right; HangButton.VerticalAlignment = VerticalAlignment.Center;
@@ -358,6 +363,7 @@ namespace ScreenLine
         async void ShowPreview(CaptureItem item)
         {
             int version = ++previewVersion;
+            ArchiveOption.SetKey(item == null ? null : item.Path);
             previewItem = item; previewContent = item == null ? null : item.Image;
             preview.Source = item == null ? null : item.Image.CachedThumbnail;
             previewHint.Visibility = preview.Source == null ? Visibility.Visible : Visibility.Collapsed;
