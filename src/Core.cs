@@ -128,27 +128,39 @@ namespace ScreenLine
             return State.CardCreatedUtc.TryGetValue(path, out date) ? date : DateTime.UtcNow;
         }
         public string ArchiveRoot { get { return Path.Combine(Path.GetDirectoryName(Root), "归档"); } }
+        static readonly object archiveGate = new object();
         public void Archive(string image, string text, DateTime created)
         {
             if (!State.ArchiveDeleted) return;
-            if (created == default(DateTime)) created = DateTime.UtcNow;
-            var local = created.ToLocalTime();
-            string directory = Path.Combine(ArchiveRoot, local.ToString("yyyy"), local.ToString("MM"));
-            Directory.CreateDirectory(directory);
-            string stem = local.ToString("yyyy-MM-dd_HH-mm-ss"), target = null;
-            string extension = image == null ? "" : Path.GetExtension(image);
-            // Reserve a basename across all extensions, including image/text pairs.
-            for (int n = 0; ; n++) {
-                string name = stem + (n == 0 ? "" : "_" + n);
-                if (Directory.GetFiles(directory, name + ".*").Length != 0) continue;
-                target = Path.Combine(directory, name); break;
+            lock (archiveGate) {
+                if (created == default(DateTime)) created = DateTime.UtcNow;
+                var local = created.ToLocalTime();
+                string directory = Path.Combine(ArchiveRoot, local.ToString("yyyy"), local.ToString("MM"));
+                Directory.CreateDirectory(directory);
+                string monthly = Path.Combine(directory, local.ToString("yyyy-MM") + ".txt");
+                string previous = File.Exists(monthly) ? File.ReadAllText(monthly, Encoding.UTF8) : "";
+                var ids = new HashSet<string>(previous.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None)
+                    .Where(line => line.StartsWith("任务ID：", StringComparison.Ordinal)).Select(line => line.Substring("任务ID：".Length)), StringComparer.Ordinal);
+                string stem = local.ToString("yyyy-MM-dd_HH-mm-ss"), id;
+                for (int n = 0; ; n++) {
+                    id = stem + (n == 0 ? "" : "_" + n);
+                    if (!ids.Contains(id) && Directory.GetFiles(directory, id + ".*").Length == 0) break;
+                }
+                string imageTarget = image == null ? null : Path.Combine(directory, id + Path.GetExtension(image));
+                string temporary = monthly + "." + Guid.NewGuid().ToString("N") + ".tmp";
+                bool copied = false;
+                try {
+                    if (image != null) { File.Copy(image, imageTarget, false); copied = true; }
+                    if (image == null || !string.IsNullOrEmpty(text)) {
+                        string separator = string.IsNullOrEmpty(previous) ? "" : (previous.EndsWith("\n", StringComparison.Ordinal) ? "" : Environment.NewLine) + "-----------------------------------" + Environment.NewLine;
+                        string record = "任务ID：" + id + Environment.NewLine + "任务详情：" + Environment.NewLine + (text ?? "") + Environment.NewLine;
+                        File.WriteAllText(temporary, previous + separator + record, new UTF8Encoding(false));
+                        FileRules.Commit(temporary, monthly);
+                    }
+                }
+                catch { if (copied) { try { File.Delete(imageTarget); } catch { } } throw; }
+                finally { if (File.Exists(temporary)) { try { File.Delete(temporary); } catch { } } }
             }
-            var written = new List<string>();
-            try {
-                if (image != null) { File.Copy(image, target + extension, false); written.Add(target + extension); }
-                if (image == null || !string.IsNullOrEmpty(text)) { string file = target + ".txt"; File.WriteAllText(file, text ?? "", new UTF8Encoding(false)); written.Add(file); }
-            }
-            catch { foreach (var file in written) { try { File.Delete(file); } catch { } } throw; }
         }
 
         public void InitializeCardColors()

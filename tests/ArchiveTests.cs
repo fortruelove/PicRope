@@ -16,16 +16,25 @@ store.State.ArchiveDeleted=true;store.Save();
 var date=new DateTime(2025,3,4,5,6,7,DateTimeKind.Utc);var local=date.ToLocalTime();
 var text=texts.Create("中文\n完整文字");text.CreatedUtc=date;texts.UpdateContent(text,"修改后的\n完整文字");texts.Remove(text);
 var directory=Path.Combine(store.ArchiveRoot,local.ToString("yyyy"),local.ToString("MM"));var stem=local.ToString("yyyy-MM-dd_HH-mm-ss");
-Check(File.ReadAllText(Path.Combine(directory,stem+".txt"),Encoding.UTF8)=="修改后的\n完整文字","文字按初次创建年月归档且保存当前全文");
+var monthly=Path.Combine(directory,local.ToString("yyyy-MM")+".txt");
+Check(File.ReadAllText(monthly,Encoding.UTF8).Contains("任务ID："+stem+Environment.NewLine+"任务详情："+Environment.NewLine+"修改后的\n完整文字"),"当月文字包含任务ID及完整详情");
 var duplicate=texts.Create("同秒");duplicate.CreatedUtc=date;texts.Remove(duplicate);
-Check(File.Exists(Path.Combine(directory,stem+"_1.txt")),"同秒重名使用序号不覆盖");
+Check(File.ReadAllText(monthly).Contains("任务ID："+stem+"_1"+Environment.NewLine),"同秒重名使用序号不覆盖");
 var bitmap=BitmapSource.Create(1,1,96,96,PixelFormats.Bgra32,null,new byte[]{0,0,255,255},4);
 var image=Path.Combine(root,"image.png");File.WriteAllBytes(image,ImageContent.EncodeClipboard(bitmap));var card=gallery.ImportCard(image,ImageContent.Read(image),"配图备注",true);
 store.State.CardCreatedUtc[image]=date;store.Save();gallery.DeleteCard(card);
-Check(File.Exists(Path.Combine(directory,stem+"_2.png"))&&File.ReadAllText(Path.Combine(directory,stem+"_2.txt"))=="配图备注"&&!File.Exists(image),"图文使用相同名称配对且移除原内容");
+Check(File.Exists(Path.Combine(directory,stem+"_2.png"))&&File.ReadAllText(monthly).Contains("任务ID："+stem+"_2"+Environment.NewLine+"任务详情："+Environment.NewLine+"配图备注")&&!File.Exists(image),"图文使用相同名称配对且移除原内容");
 Check(new StateStore(root).State.ArchiveDeleted&&new StateStore(root).State.CardCreatedUtc[image]==date,"开关和初次创建时间持久保存");
 var batch1=texts.Create("批量一");var batch2=texts.Create("批量二");batch1.CreatedUtc=batch2.CreatedUtc=date;
-texts.RemoveMany(new[]{batch1,batch2});Check(!texts.Items.Contains(batch1)&&!texts.Items.Contains(batch2)&&File.Exists(Path.Combine(directory,stem+"_3.txt"))&&File.Exists(Path.Combine(directory,stem+"_4.txt")),"批量删除逐条归档且不互相覆盖");
+texts.RemoveMany(new[]{batch1,batch2});Check(!texts.Items.Contains(batch1)&&!texts.Items.Contains(batch2)&&File.ReadAllText(monthly).Contains("任务ID："+stem+"_3"+Environment.NewLine)&&File.ReadAllText(monthly).Contains("任务ID："+stem+"_4"+Environment.NewLine),"批量删除逐条归档且不互相覆盖");
+Check(Directory.GetFiles(directory,"*.txt").Length==1&&File.ReadAllText(monthly).Split(new[]{"-----------------------------------"},StringSplitOptions.None).Length==5,"同月只生成一个文本文件且任务间使用指定分隔线");
+var legacyFile=Path.Combine(directory,stem+"_5.txt");File.WriteAllText(legacyFile,"旧版归档保持原样");
+var legacyMemo=texts.Create("新格式");legacyMemo.CreatedUtc=date;texts.Remove(legacyMemo);
+Check(File.ReadAllText(legacyFile)=="旧版归档保持原样"&&File.ReadAllText(monthly).Contains("任务ID："+stem+"_6"+Environment.NewLine),"兼容已有归档并避开旧文件ID");
+using(var locked=new FileStream(monthly,FileMode.Open,FileAccess.Read,FileShare.None)) {
+var retry=texts.Create("月文件被占用");retry.CreatedUtc=date;bool lockedFailed=false;try{texts.Remove(retry);}catch(IOException){lockedFailed=true;}
+Check(lockedFailed&&texts.Items.Contains(retry),"月文本文件无法读取时保留备忘");
+}
 var soloPath=Path.Combine(root,"solo.png");File.WriteAllBytes(soloPath,ImageContent.EncodeClipboard(bitmap));var solo=gallery.ImportCard(soloPath,ImageContent.Read(soloPath),"",true);
 var firstCreated=store.CardCreated(soloPath);File.SetLastWriteTimeUtc(soloPath,DateTime.UtcNow.AddDays(1));gallery.Remove(solo);gallery.HangCard(solo);
 Check(store.CardCreated(soloPath)==firstCreated&&new StateStore(root).CardCreated(soloPath).ToString("s")==firstCreated.ToString("s"),"编辑文件及取下重挂不改变图片初次创建时间");
