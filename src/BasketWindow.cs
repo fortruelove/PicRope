@@ -61,7 +61,7 @@ namespace ScreenLine
         readonly Action<CaptureItem> hang;
         readonly Action<ShotAction, CaptureItem> act;
         readonly HashSet<string> selected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        readonly UniformGrid thumbnails = new UniformGrid { Columns = 3 };
+        readonly UniformGrid thumbnails = new UniformGrid { Columns = 3, VerticalAlignment = VerticalAlignment.Top };
         readonly ScrollViewer scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled };
         readonly TextBlock empty = new TextBlock { TextAlignment = TextAlignment.Center, Foreground = LightTheme.Brush("#65717F"), FontSize = 14, VerticalAlignment = VerticalAlignment.Center, TextWrapping = TextWrapping.Wrap };
         readonly TextBlock status = new TextBlock { FontSize = 14, Foreground = LightTheme.Brush("#283343"), VerticalAlignment = VerticalAlignment.Center };
@@ -76,23 +76,23 @@ namespace ScreenLine
         static readonly SemaphoreSlim previewSlot = new SemaphoreSlim(1, 1);
         internal readonly Button PendingTab, AllTab, HangButton, DeleteButton, SelectAllButton;
         internal readonly CheckBox AutoHang;
-        bool pendingOnly = true, refreshing, mounting, closed;
+        bool pendingOnly = false, refreshing, mounting, closed;
         internal readonly ArchiveChoice ArchiveOption;
         CaptureItem previewItem;
         ImageContent previewContent;
         int previewVersion;
-        double thumbnailHeight = 140;
         internal int SelectedCount { get { return selected.Count; } }
         internal Image Preview { get { return preview; } }
         internal int VisibleCount { get { return choices.Count; } }
         internal Button ChoiceFor(string path) { return choices[path]; }
 
-        public BasketWindow(Gallery gallery, Action<bool> setAutoHang, Action<CaptureItem> hang, Action<ShotAction, CaptureItem> act, Func<Task<string>> paste = null, ShelfWindow shelf = null)
+        public BasketWindow(Gallery gallery, Action<bool> setAutoHang, Action<CaptureItem> hang, Action<ShotAction, CaptureItem> act, Func<Task<string>> paste = null, ShelfWindow shelf = null, TextCollection texts = null)
         {
+            this.texts = texts ?? new TextCollection(gallery.Store);
             this.gallery = gallery; this.setAutoHang = setAutoHang; this.hang = hang; this.act = act;
             popupShelf = shelf;
             if (shelf != null) Owner = shelf;
-            Title = "图片篮子 · 图绳";
+            Title = "备忘篮子 · 图绳";
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
             AllowsTransparency = true; Background = Brushes.Transparent;
             ShowInTaskbar = false; Topmost = true;
@@ -118,54 +118,77 @@ namespace ScreenLine
             heading.ColumnDefinitions.Add(new ColumnDefinition());
             heading.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var title = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            title.Children.Add(new TextBlock { Text = "图片篮子", FontSize = 18, FontWeight = FontWeights.Bold, Foreground = LightTheme.Brush("#283343"), VerticalAlignment = VerticalAlignment.Center });
+            title.Children.Add(new TextBlock { Text = "备忘篮子", FontSize = 18, FontWeight = FontWeights.Bold, Foreground = LightTheme.Brush("#283343"), VerticalAlignment = VerticalAlignment.Center });
             heading.Children.Add(title);
             var tools = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-            tools.Children.Add(new TextBlock { Text = "新图片自动上绳", FontSize = 12, Foreground = LightTheme.Brush("#65717F"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
-            AutoHang = new CheckBox { VerticalAlignment = VerticalAlignment.Center, Cursor = Cursors.Hand, ToolTip = "关闭后，新图片仍收进图片篮子" };
-            AutoHang.Template = LightTheme.AutoHangSwitchTemplate;
-            AutomationProperties.SetName(AutoHang, "新图片自动上绳");
-            AutoHang.Checked += AutoChanged; AutoHang.Unchecked += AutoChanged;
-            tools.Children.Add(AutoHang);
+            var switches = new StackPanel {Orientation=Orientation.Horizontal};
+            var imageSwitch = new StackPanel { Orientation = Orientation.Horizontal };
+            imageSwitch.Children.Add(new TextBlock { Text="新图片自动上绳",FontSize=12,Foreground=LightTheme.Brush("#65717F"),VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0) });
+            AutoHang = new CheckBox {Template=LightTheme.AutoHangSwitchTemplate,Cursor=Cursors.Hand};
+            AutomationProperties.SetName(AutoHang,"新图片自动上绳"); AutoHang.Checked+=AutoChanged;AutoHang.Unchecked+=AutoChanged;
+            imageSwitch.Children.Add(AutoHang);switches.Children.Add(imageSwitch);
+            var textSwitch = new StackPanel {Orientation=Orientation.Horizontal,Margin=new Thickness(20,0,0,0)};
+            textSwitch.Children.Add(new TextBlock {Text="新文字自动上绳",FontSize=12,Foreground=LightTheme.Brush("#65717F"),VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)});
+            TextAutoHang = new CheckBox {Template=LightTheme.AutoHangSwitchTemplate,Cursor=Cursors.Hand}; AutomationProperties.SetName(TextAutoHang,"新文字自动上绳");
+            TextAutoHang.Checked+=delegate {ChangeTextAutoHang();};TextAutoHang.Unchecked+=delegate {ChangeTextAutoHang();};
+            textSwitch.Children.Add(TextAutoHang);switches.Children.Add(textSwitch);tools.Children.Add(switches);
             var close = LightTheme.Button("", Close, "quiet"); close.Content = LightTheme.CloseIcon();
             close.Width = close.Height = 28; close.MinWidth = 0; close.Padding = new Thickness(0); close.Margin = new Thickness(22, 0, 0, 0);
-            AutomationProperties.SetName(close, "关闭图片篮子"); tools.Children.Add(close); Grid.SetColumn(tools, 1); heading.Children.Add(tools);
+            AutomationProperties.SetName(close, "关闭备忘篮子"); tools.Children.Add(close); Grid.SetColumn(tools, 1); heading.Children.Add(tools);
             heading.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) { if (popupShelf == null && e.OriginalSource is TextBlock) DragMove(); };
             body.Children.Add(new Border { BorderBrush = LightTheme.Brush("#E8EBEF"), BorderThickness = new Thickness(0, 0, 0, 1), Child = heading });
 
-            var tabs = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(22, 6, 0, 8) };
-            PendingTab = LightTheme.Button("待挂", delegate { pendingOnly = true; Refresh(); });
-            AllTab = LightTheme.Button("全部", delegate { pendingOnly = false; Refresh(); });
-            PendingTab.Margin = new Thickness(0, 0, 10, 0); tabs.Children.Add(PendingTab); tabs.Children.Add(AllTab);
+            var toolbar = new Grid {Margin=new Thickness(22,6,22,8)};
+            toolbar.ColumnDefinitions.Add(new ColumnDefinition {Width=GridLength.Auto});toolbar.ColumnDefinitions.Add(new ColumnDefinition());
+            var tabs = new StackPanel {Orientation=Orientation.Horizontal};
+            NewMemoButton=LightTheme.Button("新建备忘",NewMemo);tabs.Children.Add(NewMemoButton);
             if(paste!=null) {
-                var pasteButton=LightTheme.Button("粘贴图片",async delegate {status.Text=await paste();});
-                pasteButton.Margin=new Thickness(12,0,0,0); tabs.Children.Add(pasteButton);
-                PreviewKeyDown+=async delegate(object sender,KeyEventArgs e) {if(e.Key==Key.V && Keyboard.Modifiers==ModifierKeys.Control){e.Handled=true;status.Text=await paste();}};
+                tabs.Children.Add(LightTheme.Button("粘贴",async delegate {if(SaveMemo())status.Text=await paste();}));
+                PreviewKeyDown+=async delegate(object sender,KeyEventArgs e){if(e.Key==Key.V && Keyboard.Modifiers==ModifierKeys.Control && !MemoEditor.IsKeyboardFocusWithin && !Search.IsKeyboardFocusWithin){e.Handled=true;if(SaveMemo())status.Text=await paste();}};
             }
-            tabs.Children.Add(LightTheme.Button("关联 / 编辑图文…",delegate {var item=gallery.Collected.FirstOrDefault(i=>selected.Contains(i.Path)) ?? previewItem; if(item!=null)act(ShotAction.CardEdit,item);}));
-            var tabBar = new Border { BorderBrush = LightTheme.Brush("#E8EBEF"), BorderThickness = new Thickness(0, 0, 0, 1), Child = tabs };
-            Grid.SetRow(tabBar, 1); body.Children.Add(tabBar);
+            HangButton=LightTheme.Button("挂上绳子",Mount,"primary");tabs.Children.Add(HangButton);
+            tabs.Children.Add(new Border {Width=1,Height=22,Background=LightTheme.Brush("#DCE2EA"),Margin=new Thickness(6,0,10,0)});
+            AllTab=LightTheme.Button("全部",delegate {if(SaveMemo()){pendingOnly=false;memoTypeFilter=0;Refresh();}});
+            PendingTab=LightTheme.Button("待挂",delegate {if(SaveMemo()){pendingOnly=!pendingOnly;Refresh();}});
+            tabs.Children.Add(AllTab);tabs.Children.Add(PendingTab);
+            string[] typeNames={"图片","文字","图文"};
+            for(int n=0;n<3;n++){int type=n+1;var button=LightTheme.Button(typeNames[n],delegate {ChooseType(type);});TypeButtons[n]=button;tabs.Children.Add(button);}
+            toolbar.Children.Add(tabs);
+            Search=new TextBox {MinWidth=90,Padding=new Thickness(10,5,10,5),BorderThickness=new Thickness(0),Background=Brushes.Transparent,VerticalContentAlignment=VerticalAlignment.Center};
+            var searchPanel=new Grid {HorizontalAlignment=HorizontalAlignment.Stretch,Margin=new Thickness(12,0,0,0)};
+            searchPanel.Children.Add(new Border {CornerRadius=new CornerRadius(7),BorderBrush=LightTheme.Brush("#DCE2EA"),BorderThickness=new Thickness(1),Child=Search});
+            var placeholder=new TextBlock {Text="搜索备忘",Foreground=LightTheme.Brush("#8390A1"),VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(11,0,0,0),IsHitTestVisible=false};searchPanel.Children.Add(placeholder);
+            AutomationProperties.SetName(Search,"搜索备忘");Search.ToolTip="搜索文字、备注或图片文件名";
+            Search.TextChanged+=delegate {placeholder.Visibility=Search.Text.Length==0?Visibility.Visible:Visibility.Collapsed;if(!refreshing)Refresh();};
+            Grid.SetColumn(searchPanel,1);toolbar.Children.Add(searchPanel);
+            Action sizeActions=delegate {bool compact=toolbar.ActualWidth>0&&toolbar.ActualWidth<800;foreach(var button in tabs.Children.OfType<Button>()){button.MinWidth=0;button.FontSize=compact?12:13;button.Padding=new Thickness(compact?6:12,0,compact?6:12,0);button.Margin=new Thickness(0,0,compact?4:6,0);}};
+            sizeActions();toolbar.SizeChanged+=delegate {sizeActions();};
+            var tabBar=new Border {BorderBrush=LightTheme.Brush("#E8EBEF"),BorderThickness=new Thickness(0,0,0,1),Child=toolbar};Grid.SetRow(tabBar,1);body.Children.Add(tabBar);
 
             var content = new Grid { ClipToBounds = true };
-            content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3, GridUnitType.Star) });
             content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
+            content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(3, GridUnitType.Star) });
             var left = new Grid { Margin = new Thickness(16, 10, 12, 12), ClipToBounds = true };
             scroll.Content = thumbnails; left.Children.Add(scroll); left.Children.Add(empty); content.Children.Add(left);
             scroll.ScrollChanged += delegate { UpdateThumbnails(); };
             Loaded += delegate { UpdateThumbnails(); if (previewItem != null) ShowPreview(previewItem); };
             var previewBody = new Grid { ClipToBounds = true };
-            previewBody.RowDefinitions.Add(new RowDefinition { Height = new GridLength(28) });
+            previewBody.RowDefinitions.Add(new RowDefinition { Height = new GridLength(38) });
+            previewBody.RowDefinitions.Add(new RowDefinition());
             previewBody.RowDefinitions.Add(new RowDefinition());
             previewBody.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             var previewHeading = new Grid { Margin = new Thickness(16, 0, 16, 0) };
-            previewHeading.Children.Add(new TextBlock { Text = "预览", VerticalAlignment = VerticalAlignment.Center, FontSize = 12, Foreground = LightTheme.Brush("#65717F") });
+            previewHeading.Children.Add(new TextBlock { Text = "详情", VerticalAlignment = VerticalAlignment.Center, FontSize = 12, Foreground = LightTheme.Brush("#65717F") });
+            var editMemo=LightTheme.Button("配图 / 编辑…",delegate {if(SaveMemo()&&previewItem!=null)act(ShotAction.CardEdit,previewItem);});
+            editMemo.Height=28;editMemo.FontSize=12;editMemo.HorizontalAlignment=HorizontalAlignment.Right;editMemo.Margin=new Thickness(0,0,142,0);previewHeading.Children.Add(editMemo);
             ArchiveOption = new ArchiveChoice(gallery.Store, delegate(string message) { status.Text = message; });
             ArchiveOption.HorizontalAlignment = HorizontalAlignment.Right; previewHeading.Children.Add(ArchiveOption); previewBody.Children.Add(previewHeading);
             Closed += delegate { ArchiveOption.Dispose(); };
             Grid.SetRow(preview, 1); previewBody.Children.Add(preview);
             Grid.SetRow(previewHint, 1); previewBody.Children.Add(previewHint);
-            Grid.SetRow(metadata, 2); previewBody.Children.Add(metadata);
-            previewBody.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) { if (e.ClickCount == 2 && previewItem != null) act(ShotAction.Open, previewItem); };
+            InitializeMemoEditor(previewBody);
+            Grid.SetRow(metadata, 3); previewBody.Children.Add(metadata);
+            preview.MouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) { if(e.ClickCount==2 && previewItem!=null && !previewItem.IsText){e.Handled=true;OpenOriginal();} };
             previewBody.ToolTip = "双击打开原图";
             var previewPanel = new Border { Background = LightTheme.Brush("#F1F4F8"), CornerRadius = new CornerRadius(9), Margin = new Thickness(12, 10, 20, 12), Child = previewBody };
             var right = new Border { BorderBrush = LightTheme.Brush("#E8EBEF"), BorderThickness = new Thickness(1, 0, 0, 0), Child = previewPanel };
@@ -193,14 +216,11 @@ namespace ScreenLine
             DeleteButton.Background = LightTheme.Brush("#FFF8F7"); DeleteButton.BorderBrush = LightTheme.Brush("#ECD6D2");
             DeleteButton.ToolTip = "按每条备忘的归档设置删除";
             AutomationProperties.SetName(DeleteButton, "删除所选图片"); Grid.SetColumn(DeleteButton, 2); footer.Children.Add(DeleteButton);
-            HangButton = LightTheme.Button("挂上绳子", Mount, "primary"); HangButton.Width = 144; HangButton.Height = 38;
-            HangButton.HorizontalAlignment = HorizontalAlignment.Right; HangButton.VerticalAlignment = VerticalAlignment.Center;
-            AutomationProperties.SetName(HangButton, "挂上绳子"); Grid.SetColumn(HangButton, 3); footer.Children.Add(HangButton);
             foreach (var button in new[] { PendingTab, AllTab, SelectAllButton, DeleteButton, HangButton })
             {
                 button.FontWeight = FontWeights.Normal;
             }
-            foreach (var button in new[] { SelectAllButton, DeleteButton, HangButton }) button.FontSize = 14;
+            foreach (var button in new[] { SelectAllButton, DeleteButton }) button.FontSize = 14;
             var bottom = new Border { BorderBrush = LightTheme.Brush("#E8EBEF"), BorderThickness = new Thickness(0, 1, 0, 0), Child = footer };
             Grid.SetRow(bottom, 3); body.Children.Add(bottom);
             SourceInitialized += delegate
@@ -212,104 +232,64 @@ namespace ScreenLine
                     screen.WorkingArea.Top + Math.Min((int)(190 * dpi), Math.Max(16, (screen.WorkingArea.Height - height) / 2)), width, height, 0x14);
             };
             PreviewKeyDown += delegate(object sender, KeyEventArgs e) { if (e.Key == Key.Escape) Close(); };
-            gallery.Changed += GalleryChanged;
-            Closed += delegate { closed = true; gallery.Changed -= GalleryChanged; previewVersion++; preview.Source = null; foreach (var image in pictures.Values) image.Source = null; pictures.Clear(); visiblePictures.Clear(); };
+            gallery.Changed += GalleryChanged; this.texts.Changed+=GalleryChanged;
+            Closing+=delegate(object sender,System.ComponentModel.CancelEventArgs e){if(!SaveMemo())e.Cancel=true;};
+            Closed += delegate { closed = true; memoTimer.Stop(); this.texts.Changed-=GalleryChanged; gallery.Changed -= GalleryChanged; previewVersion++; preview.Source = null; foreach (var image in pictures.Values) image.Source = null; pictures.Clear(); visiblePictures.Clear(); };
             Refresh();
         }
 
         void AutoChanged(object sender, RoutedEventArgs e)
         {
-            if (!refreshing && gallery.Store.State.AutoHang != (AutoHang.IsChecked == true)) setAutoHang(AutoHang.IsChecked == true);
+            if (!refreshing && gallery.Store.State.AutoHang != (AutoHang.IsChecked == true)) {try {setAutoHang(AutoHang.IsChecked==true);}catch(Exception error){gallery.Store.Log(error);refreshing=true;AutoHang.IsChecked=gallery.Store.State.AutoHang;refreshing=false;status.Text="自动上绳设置保存失败";}}
         }
 
-        void GalleryChanged() { if (!mounting) Refresh(); }
+        void GalleryChanged() { if (!mounting && !savingMemo) Refresh(); }
 
         void Refresh()
         {
-            refreshing = true;
-            AutoHang.IsChecked = gallery.Store.State.AutoHang;
-            refreshing = false;
-            selected.RemoveWhere(path => (pendingOnly && gallery.Contains(path)) || !gallery.Collected.Any(i => FileRules.SameFile(i.Path, path)));
-            int pending = gallery.Collected.Count(i => !gallery.Contains(i.Path));
-            PendingTab.Content = "待挂 " + pending; AllTab.Content = "全部 " + gallery.Collected.Count;
-            PendingTab.Tag = pendingOnly ? "primary" : "quiet"; AllTab.Tag = pendingOnly ? "quiet" : "primary";
-            double offset = scroll.VerticalOffset;
-            thumbnails.Children.Clear(); choices.Clear(); pictures.Clear(); visiblePictures.Clear();
-            var items = gallery.Collected.Where(i => !pendingOnly || !gallery.Contains(i.Path)).OrderByDescending(i => i.Written).ToArray();
-            foreach (var item in items) AddChoice(item);
+            if(savingMemo || !SaveMemo())return;
+            refreshing=true;AutoHang.IsChecked=gallery.Store.State.AutoHang;TextAutoHang.IsChecked=texts.AutoHang;refreshing=false;
+            var all=AllMemos();
+            selected.RemoveWhere(path=>!all.Any(i=>i.Path==path));
+            int pending=all.Count(i=>!Mounted(i));PendingTab.Content="待挂 "+pending;AllTab.Content="全部 "+all.Count;
+            PendingTab.Tag=pendingOnly?"primary":null;AllTab.Tag=!pendingOnly&&memoTypeFilter==0?"primary":null;
+            for(int n=0;n<3;n++)TypeButtons[n].Tag=memoTypeFilter==n+1?"primary":null;
+            double offset=scroll.VerticalOffset;thumbnails.Children.Clear();choices.Clear();pictures.Clear();visiblePictures.Clear();
+            var items=all.Where(i=>(!pendingOnly || !Mounted(i)) && Matches(i)).OrderByDescending(Created).ToArray();
+            selected.IntersectWith(items.Select(i=>i.Path));
+            foreach(var item in items)AddChoice(item);
             Dispatcher.BeginInvoke(new Action(UpdateThumbnails), System.Windows.Threading.DispatcherPriority.Loaded);
-            empty.Text = gallery.Collected.Count == 0 ? "图片篮子还是空的\n截图收集后会出现在这里" : "图片都挂好了\n切换到「全部」查看收集的图片";
-            empty.Visibility = items.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-            scroll.Visibility = items.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
-            scroll.ScrollToVerticalOffset(offset);
-            UpdateSelection();
-            if (previewItem != null && !gallery.Collected.Contains(previewItem)) previewItem = null;
-            if (previewItem == null) ShowPreview(items.FirstOrDefault());
-            else if (previewContent != previewItem.Image) ShowPreview(previewItem);
+            empty.Text=all.Count==0?"篮子还是空的\n新建备忘或粘贴内容开始记录":"没有匹配的备忘";
+            empty.Visibility=items.Length==0?Visibility.Visible:Visibility.Collapsed;scroll.Visibility=items.Length==0?Visibility.Collapsed:Visibility.Visible;
+            scroll.ScrollToVerticalOffset(offset);UpdateSelection();
+            if(!creatingMemo) {
+                var next=items.FirstOrDefault(i=>previewItem!=null && i.Path==previewItem.Path) ?? items.FirstOrDefault();
+                if(next!=previewItem || (next!=null && !next.IsText && previewContent!=next.Image))ShowPreview(next);
+                else ArchiveOption.SetKey(next==null?null:next.Path);
+            }
         }
 
         void AddChoice(CaptureItem item)
         {
-            bool mounted = gallery.Contains(item.Path);
-            var stack = new StackPanel();
-            var image = new Grid { Height = thumbnailHeight };
-            var picture = new Image { Stretch = Stretch.Uniform, Margin = new Thickness(7) }; pictures[item] = picture;
-            image.Children.Add(picture);
-            var mark = new Border { Width = mounted ? 54 : 21, Height = 21, CornerRadius = new CornerRadius(11),
-                HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(7),
-                BorderThickness = new Thickness(1) };
-            image.Children.Add(mark);
-            var frame = new Border { Child = image, Background = LightTheme.Brush("#F1F4F8"), BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(8) };
-            stack.Children.Add(frame);
-            string note=gallery.Note(item);
-            if(!string.IsNullOrEmpty(note)) stack.Children.Add(new TextBlock {Text=note,TextWrapping=TextWrapping.Wrap,TextTrimming=TextTrimming.CharacterEllipsis,MaxHeight=34,FontSize=12,Margin=new Thickness(4,4,4,0),ToolTip=note.Length>600?note.Substring(0,600)+"…":note});
-            stack.Children.Add(new TextBlock { Text = TimeLabel(item.Written), FontSize = 11, Foreground = LightTheme.Brush("#65717F"), Margin = new Thickness(3, 7, 0, 0) });
-            var button = new Button { Style = LightTheme.ButtonStyle, Tag = "quiet", VerticalAlignment = VerticalAlignment.Top };
-            Action updateChoice = delegate
-            {
-                bool chosen = selected.Contains(item.Path);
-                mark.Visibility = chosen || mounted ? Visibility.Visible : Visibility.Collapsed;
-                frame.BorderBrush = LightTheme.Brush(chosen ? "#2463AE" : button.IsKeyboardFocused ? "#6E97CB" : "#E5EAF1");
-                mark.Background = LightTheme.Brush(chosen ? "#2463AE" : "#FFFFFF"); mark.BorderBrush = LightTheme.Brush(chosen ? "#2463AE" : "#9CAABD");
-                if (mounted)
-                {
-                    mark.Width = chosen ? 68 : 54;
-                    mark.Child = new TextBlock { Text = chosen ? "\u2713 已挂上" : "已挂上", FontSize = 10, Foreground = chosen ? Brushes.White : LightTheme.Brush("#65717F"), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-                }
-                else mark.Child = chosen ? new TextBlock { Text = "\uE73E", FontFamily = new FontFamily("Segoe MDL2 Assets"), FontSize = 12, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } : null;
-                AutomationProperties.SetItemStatus(button, chosen ? (mounted ? "已选择，已挂上" : "已选择") : mounted ? "已挂上" : "待挂");
-            };
-            button.IsKeyboardFocusedChanged += delegate { updateChoice(); };
-            button.Click += delegate
-            {
-                if (!selected.Add(item.Path)) selected.Remove(item.Path);
-                ShowPreview(item); updateChoice(); UpdateSelection();
-            };
-            var menu=new ImageMenu(delegate(ShotAction action){act(action,item);}); menu.SetCard(false,!string.IsNullOrEmpty(note));
-            button.ContextMenu=menu;
-            button.Content = stack; button.Height = Double.NaN; button.Padding = new Thickness(0); button.Margin = new Thickness(6, 0, 6, 16);
-            button.Template = choiceTemplate;
-            button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-            button.ToolTip = Path.GetFileName(item.Path);
-            AutomationProperties.SetName(button, Path.GetFileName(item.Path));
-            updateChoice();
-            thumbnails.Children.Add(button); choices[item.Path] = button;
+            bool mounted=Mounted(item);string note=MemoText(item);
+            var stack=new StackPanel();var tile=new Grid {Height=96,Margin=new Thickness(6)};
+            if(item.IsText)tile.Children.Add(new TextBlock {Text=note,TextWrapping=TextWrapping.Wrap,TextTrimming=TextTrimming.CharacterEllipsis,MaxHeight=90,FontSize=12,Foreground=LightTheme.Brush("#283343"),Margin=new Thickness(4)});
+            else {var image=new Image {Stretch=Stretch.Uniform};pictures[item]=image;tile.Children.Add(image);}
+            var mark=new Border {Width=22,Height=22,CornerRadius=new CornerRadius(11),Background=LightTheme.Brush("#2463AE"),HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Top,Child=new TextBlock {Text="✓",Foreground=Brushes.White,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center}};
+            tile.Children.Add(mark);stack.Children.Add(tile);
+            if(!item.IsText&&!string.IsNullOrEmpty(note))stack.Children.Add(new TextBlock {Text=note.Replace("\r"," ").Replace("\n"," "),TextTrimming=TextTrimming.CharacterEllipsis,FontSize=11,Margin=new Thickness(7,0,7,0)});
+            stack.Children.Add(new TextBlock {Text=TimeLabel(Created(item)),Foreground=LightTheme.Brush("#8390A1"),FontSize=10,Margin=new Thickness(7,5,7,0)});
+            var frame=new Border {Child=stack,CornerRadius=new CornerRadius(8),BorderThickness=new Thickness(2)};
+            var button=new Button {Content=frame,Template=choiceTemplate,Height=150,VerticalAlignment=VerticalAlignment.Top,Padding=new Thickness(0),Margin=new Thickness(4,0,4,10),HorizontalContentAlignment=HorizontalAlignment.Stretch};
+            Action sync=delegate {bool chosen=selected.Contains(item.Path);mark.Visibility=chosen?Visibility.Visible:Visibility.Collapsed;frame.BorderBrush=LightTheme.Brush(chosen?"#2463AE":"#E5EAF1");frame.Background=LightTheme.Brush(chosen?"#EDF4FF":"#FFFFFF");AutomationProperties.SetItemStatus(button,chosen?(mounted?"已选择，已挂上":"已选择"):mounted?"已挂上":"待挂");};
+            button.Click+=delegate {if(!SaveMemo())return;if(!selected.Add(item.Path))selected.Remove(item.Path);ShowPreview(item);sync();UpdateSelection();};
+            var menu=new ImageMenu(delegate(ShotAction action){if(SaveMemo())act(action,item);});menu.SetCard(item.IsText,!string.IsNullOrEmpty(note));menu.ChooseColor=delegate(int color){try{gallery.Store.SetCardColor(item.Path,color);gallery.Notify();}catch(Exception error){gallery.Store.Log(error);status.Text="颜色保存失败，请重试";}};button.ContextMenu=menu;
+            button.ToolTip=MemoType(item)+" · "+(item.IsText?note:Path.GetFileName(item.Path));AutomationProperties.SetName(button,MemoType(item)+" "+(item.IsText?note:Path.GetFileName(item.Path)));sync();thumbnails.Children.Add(button);choices[item.Path]=button;
         }
 
         void UpdateThumbnails()
         {
             if (closed) return;
-            if (scroll.ViewportHeight > 0 && pictures.Count > 0)
-            {
-                var first = pictures.First();
-                var slot = (FrameworkElement)first.Value.Parent;
-                var choice = choices[first.Key.Path];
-                double spacing = choice.ActualHeight > 0 ? choice.ActualHeight - slot.ActualHeight + choice.Margin.Top + choice.Margin.Bottom : 44;
-                int rows = Math.Max(1, (int)Math.Ceiling(scroll.ViewportHeight / 180));
-                thumbnailHeight = Math.Max(40, Math.Ceiling(scroll.ViewportHeight / rows - spacing + 1));
-                foreach (var picture in pictures.Values)
-                    if (Math.Abs(((FrameworkElement)picture.Parent).Height - thumbnailHeight) > 0.5) ((FrameworkElement)picture.Parent).Height = thumbnailHeight;
-            }
             var viewport = new Rect(0, 0, scroll.ActualWidth, scroll.ActualHeight);
             visiblePictures.Clear();
             foreach (var entry in pictures)
@@ -362,14 +342,17 @@ namespace ScreenLine
 
         async void ShowPreview(CaptureItem item)
         {
-            int version = ++previewVersion;
-            ArchiveOption.SetKey(item == null ? null : item.Path);
-            previewItem = item; previewContent = item == null ? null : item.Image;
-            preview.Source = item == null ? null : item.Image.CachedThumbnail;
-            previewHint.Visibility = preview.Source == null ? Visibility.Visible : Visibility.Collapsed;
-            previewHint.Text = item == null ? "选择图片，查看大图" : "正在加载预览…";
-            metadata.Text = item == null ? "" : TimeLabel(item.Written) + " · " + item.Image.PixelWidth + " × " + item.Image.PixelHeight;
-            if (item == null || !IsLoaded) return;
+            if(previewItem!=item && !SaveMemo())return;
+            int version=++previewVersion;bool changed=previewItem!=item;
+            previewItem=item;previewContent=item==null?null:item.Image;
+            ArchiveOption.SetKey(item==null?null:item.Path);
+            if(changed || !MemoEditor.IsEnabled)LoadMemo(item);
+            preview.Visibility=item==null || item.IsText?Visibility.Collapsed:Visibility.Visible;
+            preview.Source=item==null || item.IsText?null:item.Image.CachedThumbnail;
+            previewHint.Visibility=item==null?Visibility.Visible:Visibility.Collapsed;previewHint.Text="选择备忘查看详情";
+            var parent=(Grid)preview.Parent;parent.RowDefinitions[1].Height=new GridLength(item==null || item.IsText?0:150);
+            metadata.Text=item==null?"":MemoType(item)+" · "+TimeLabel(Created(item));
+            if(item==null || item.IsText || !IsLoaded)return;
             try
             {
                 await previewSlot.WaitAsync();
@@ -422,30 +405,32 @@ namespace ScreenLine
         {
             SelectAllButton.IsEnabled = choices.Count > 0;
             SelectAllButton.Content = choices.Count > 0 && choices.Keys.All(selected.Contains) ? "取消全选" : "全选";
-            int pending = selected.Count(path => !gallery.Contains(path));
-            status.Text = "已选 " + selected.Count + " 张" + (pending < selected.Count ? " · " + pending + " 张待挂" : "");
+            int pending=AllMemos().Count(i=>selected.Contains(i.Path)&&!Mounted(i));
+            status.Text = "已选 " + selected.Count + " 条" + (pending < selected.Count ? " · " + pending + " 条待挂" : "");
             HangButton.IsEnabled = pending > 0;
             DeleteButton.IsEnabled = selected.Count > 0;
         }
 
         void Mount()
         {
-            var items = gallery.Collected.Where(i => selected.Contains(i.Path) && !gallery.Contains(i.Path)).ToArray();
+            if(!SaveMemo())return;
+            var items=AllMemos().Where(i=>selected.Contains(i.Path)&&!Mounted(i)).ToArray();
             mounting = true;
-            try { foreach (var item in items) hang(item); }
+            try { foreach(var item in items) {if(item.IsText)texts.SetHanging(new[]{item.Text},true);else hang(item);} }
             finally { mounting = false; selected.Clear(); Refresh(); }
-            status.Text = "已挂上 " + items.Count(i => gallery.Contains(i.Path)) + " 张";
+            status.Text = "已挂上 " + items.Count(Mounted) + " 条";
         }
 
         void DeleteSelected()
         {
-            var items = gallery.Collected.Where(item => selected.Contains(item.Path)).ToArray();
+            if(!SaveMemo())return;
+            var items=AllMemos().Where(item=>selected.Contains(item.Path)).ToArray();
             if (items.Length == 0) return;
             mounting = true;
             try { foreach (var item in items) act(ShotAction.Trash, item); }
             finally { mounting = false; Refresh(); }
-            int removed = items.Count(item => !File.Exists(item.Path));
-            status.Text = "已删除 " + removed + " 张" + (removed < items.Length ? " · " + (items.Length - removed) + " 张未删除" : "");
+            int removed=items.Count(item=>item.IsText?!texts.Items.Contains(item.Text):!gallery.Collected.Contains(item));
+            status.Text = "已删除 " + removed + " 条" + (removed < items.Length ? " · " + (items.Length - removed) + " 条未删除" : "");
         }
     }
 }

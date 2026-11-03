@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Win32;
 
@@ -19,7 +20,10 @@ internal sealed class CardEditorWindow : Window {
     readonly TextBlock feedback=new TextBlock {TextWrapping=TextWrapping.Wrap,Foreground=LightTheme.Brush("#65717F"),Margin=new Thickness(0,8,0,8)};
     readonly CheckBox append=new CheckBox {Content="追加到原备注（取消勾选则替换）",IsChecked=true,Margin=new Thickness(0,6,0,6)};
     readonly CaptureItem original;
-    public CardEditorWindow(Gallery gallery, CaptureItem item, bool readOnly) {
+    readonly Action<string> openPicture;
+    readonly bool readOnly;
+    public CardEditorWindow(Gallery gallery, CaptureItem item, bool readOnly, Action<string> openPicture = null) {
+        this.openPicture=openPicture; this.readOnly=readOnly;
         original=item; Title=readOnly ? "查看内容卡片" : "关联 / 编辑图文";
         Width=600; Height=720; MinWidth=440; MinHeight=480; WindowStartupLocation=WindowStartupLocation.CenterOwner;
         Topmost=true; FontFamily=new FontFamily("Microsoft YaHei UI"); FontSize=13;
@@ -34,6 +38,11 @@ internal sealed class CardEditorWindow : Window {
         var panel=new StackPanel(); scroll.Content=panel;
         panel.Children.Add(new TextBlock {Text=readOnly?"完整内容":"一张卡片，一起挂绳和管理",FontSize=18,FontWeight=FontWeights.SemiBold});
         if(!item.IsText) preview.Source=item.Image.Thumbnail;
+        if(readOnly && !item.IsText) {
+            preview.Cursor=Cursors.Hand; preview.ToolTip="双击查看原图";
+            preview.MouseLeftButtonDown+=delegate(object sender,MouseButtonEventArgs e) {if(e.ClickCount==2){e.Handled=true;OpenPicturePreview();}};
+            Activated+=delegate {Topmost=true;};
+        }
         panel.Children.Add(preview);
         Body.Text=item.IsText ? item.Text.Content : gallery.Note(item); Body.IsReadOnly=readOnly;
         if(!readOnly) {
@@ -41,12 +50,12 @@ internal sealed class CardEditorWindow : Window {
             pictureTools.Children.Add(LightTheme.Button("选择本地图片…",ChooseFile));
             pictureTools.Children.Add(LightTheme.Button("粘贴图片",async delegate {await PastePicture();}));
             panel.Children.Add(pictureTools);
-            panel.Children.Add(new TextBlock {Text="或从图片篮子选择（与当前卡片合并）",Margin=new Thickness(0,8,0,4)});
+            panel.Children.Add(new TextBlock {Text="或从备忘篮子选择图片（与当前卡片合并）",Margin=new Thickness(0,8,0,4)});
             var pictures=new ComboBox {ItemsSource=gallery.Collected.Where(p=>p!=item).ToArray(),DisplayMemberPath="Label",MaxDropDownHeight=240};
             pictures.SelectionChanged+=delegate {SelectedPicture=pictures.SelectedItem as CaptureItem; if(SelectedPicture!=null){NewPicture=null; preview.Source=SelectedPicture.Image.Thumbnail; feedback.Text="保存后合并已有图片，沿用当前卡片的挂绳状态。";}};
             panel.Children.Add(pictures);
             if(!item.IsText) {
-                panel.Children.Add(new TextBlock {Text="从文字信封选择（保存后合并）",Margin=new Thickness(0,8,0,4)});
+                panel.Children.Add(new TextBlock {Text="从备忘篮子选择文字（保存后合并）",Margin=new Thickness(0,8,0,4)});
                 var texts=new ComboBox {ItemsSource=gallery.Store.State.Texts.ToArray(),DisplayMemberPath="Content",MaxDropDownHeight=240};
                 texts.SelectionChanged+=delegate {SelectedText=texts.SelectedItem as TextItem; if(SelectedText!=null)Body.Text=SelectedText.Content;}; panel.Children.Add(texts);
                 append.Visibility=string.IsNullOrEmpty(gallery.Note(item)) ? Visibility.Collapsed : Visibility.Visible;
@@ -56,6 +65,15 @@ internal sealed class CardEditorWindow : Window {
         panel.Children.Add(new TextBlock {Text=item.IsText?"文字 / 图片备注":"图片备注",Margin=new Thickness(0,8,0,6)});
         panel.Children.Add(Body); panel.Children.Add(feedback);
         if(!readOnly) feedback.Text="粘贴或选择的新图片仅在保存后收进篮子。文字保留完整换行和缩进。";
+    }
+    internal void OpenPicturePreview() {
+        if(!readOnly || original.IsText)return;
+        try {
+            if(!File.Exists(original.Path))throw new FileNotFoundException("原图片已被移动或删除。");
+            Topmost=false;
+            if(openPicture!=null)openPicture(original.Path);
+            else System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(original.Path){UseShellExecute=true});
+        } catch(Exception error){Topmost=true;feedback.Text="无法打开原图："+error.Message;}
     }
     void ChooseFile() {
         var dialog=new OpenFileDialog {Title="选择配图",Filter="图片|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff"};

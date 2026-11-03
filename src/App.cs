@@ -18,9 +18,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("PicRope · 图绳")]
 [assembly: AssemblyProduct("PicRope")]
 [assembly: AssemblyDescription("图绳：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.2.9.0")]
-[assembly: AssemblyFileVersion("1.2.9.0")]
-[assembly: AssemblyInformationalVersion("1.2.9")]
+[assembly: AssemblyVersion("1.3.0.0")]
+[assembly: AssemblyFileVersion("1.3.0.0")]
+[assembly: AssemblyInformationalVersion("1.3.0")]
 
 namespace ScreenLine
 {
@@ -35,7 +35,6 @@ namespace ScreenLine
         LightNotice notice;
         readonly CheckBox collect;
         readonly CheckBox collectText;
-        readonly CheckBox autoHang;
         internal readonly TrayPanel TrayMenu;
         internal AppearanceWindow Appearance { get; private set; }
         internal BasketWindow Basket { get; private set; }
@@ -65,7 +64,6 @@ namespace ScreenLine
             Shelf = new ShelfWindow(Gallery, Act, EnableClipboard);
             Shelf.SortingFailed += Notice;
             Shelf.BasketRequested += ShowBasket;
-            Shelf.TextRequested += ShowTexts;
             Texts.Changed += Shelf.Update;
             Texts.Changed += Shelf.UpdateTexts;
             Gallery.Changed += Texts.Notify;
@@ -93,15 +91,10 @@ namespace ScreenLine
             });
             if (events.ShortcutAvailable) TrayMenu.Shortcut.Text = "Ctrl+Alt+T";
             else Notice("Ctrl+Alt+T 已被占用，可点击托盘图标打开。");
-            TrayMenu.OnAction(TrayMenu.BasketButton, ShowBasket);
-            TrayMenu.OnAction(TrayMenu.TextButton, ShowTexts);
             TrayMenu.OnToggle(TrayMenu.ArchiveDeleted, store.State.ArchiveDeleted, delegate(bool value) {
                 bool previous=store.State.ArchiveDeleted; store.State.ArchiveDeleted=value;
                 try {store.Save();store.NotifyArchiveSettings();} catch(Exception error) {store.State.ArchiveDeleted=previous;TrayMenu.ArchiveDeleted.IsChecked=previous;store.Log(error);Notice("归档设置保存失败，请重试。");}
             });
-            autoHang = TrayMenu.AutoHang;
-            TrayMenu.OnToggle(autoHang, Captures.AutoHang, delegate(bool value) { if (Captures.AutoHang != value) Captures.AutoHang = value; });
-            Gallery.Changed += SyncAutoHang;
             collect = TrayMenu.Pictures;
             collectText = TrayMenu.Text;
             TrayMenu.OnToggle(collect, store.State.CollectClipboard, delegate(bool value){SetAutomaticClipboard(true,value);});
@@ -169,6 +162,7 @@ namespace ScreenLine
         async void Exit()
         {
             foreach (var editor in Editors.ToArray()) if (!await editor.ConfirmClose()) return;
+            if(Basket!=null && !Basket.SaveMemo())return;
             Application.Current.Shutdown();
         }
 
@@ -269,7 +263,6 @@ namespace ScreenLine
             collect.IsChecked = true;
         }
 
-        void SyncAutoHang() { autoHang.IsChecked = Captures.AutoHang; }
 
         void SyncScreens()
         {
@@ -323,16 +316,16 @@ namespace ScreenLine
                 var card=await CardClipboard.Read(WindowsNative.GetClipboardSequenceNumber(),true);
                 if(card==null || (pictureRequired && card.Picture==null))return pictureRequired ? "剪贴板中没有图片" : "剪贴板中没有文字或图片";
                 await AcceptCard(card);
-                return card.Picture!=null ? "已粘贴到图片篮子" : "已粘贴文字";
+                return card.Picture!=null ? "已粘贴到备忘篮子" : "已粘贴文字";
             } catch(Exception error){Gallery.Store.Log(error); return "粘贴未完成，请重试";}
         }
         internal async void EditCard(CaptureItem item, bool readOnly)
         {
-            if (Basket!=null) Basket.Close();
+            if (Basket!=null) {Basket.Close();if(Basket!=null)return;}
             if (TextWindow!=null) TextWindow.Close();
             Shelf.ChoosingTexts=true;
             try {
-                var dialog=new CardEditorWindow(Gallery,item,readOnly) {Owner=Shelf};
+                var dialog=new CardEditorWindow(Gallery,item,readOnly,OpenPicturePreview) {Owner=Shelf};
                 if(dialog.ShowDialog()!=true || readOnly)return;
                 CaptureItem picture=dialog.SelectedPicture;
                 string newPath=null;
@@ -366,7 +359,7 @@ namespace ScreenLine
             if (Basket != null) { Basket.Close(); return; }
             Shelf.Reveal(true, false, 0);
             Gallery.Prune();
-            Basket = new BasketWindow(Gallery, delegate(bool value) { Captures.AutoHang = value; }, Captures.Hang, Act, delegate { return PasteCard(true); }, Shelf);
+            Basket = new BasketWindow(Gallery, delegate(bool value) { Captures.AutoHang = value; }, Captures.Hang, Act, delegate { return PasteCard(false); }, Shelf, Texts);
             Basket.Owner = Shelf;
             Shelf.ChoosingBasket = true;
             Shelf.Reveal(true, false, 0);
@@ -376,12 +369,8 @@ namespace ScreenLine
 
         internal void ShowTexts()
         {
-            if (TextWindow != null) { TextWindow.Close(); return; }
-            Shelf.Reveal(true, false, 0);
-            Shelf.ChoosingTexts = true;
-            TextWindow = new TextWindow(Texts, Shelf, delegate { return PasteCard(false); }, delegate(TextItem item) { EditCard(new CaptureItem(item), false); });
-            TextWindow.Closed += delegate { TextWindow = null; Shelf.ChoosingTexts = false; };
-            TextWindow.Show();
+            if(Basket==null)ShowBasket();
+            if(Basket!=null)Basket.FilterText();
         }
 
         void ShowAppearance()
@@ -424,6 +413,12 @@ namespace ScreenLine
 
         static string Quote(string path) { return "\"" + path + "\""; }
 
+        void OpenPicturePreview(string path)
+        {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+            Shelf.FollowImageViewer(path);
+        }
+
         public async void Act(ShotAction action, CaptureItem item)
         {
             try
@@ -464,8 +459,7 @@ namespace ScreenLine
                         Shelf.ShowCopied(item.Path);
                         break;
                     case ShotAction.Open:
-                        Process.Start(new ProcessStartInfo(item.Path) { UseShellExecute = true });
-                        Shelf.FollowImageViewer(item.Path);
+                        OpenPicturePreview(item.Path);
                         break;
                     case ShotAction.Edit:
                         var existing = Editors.Find(editor => FileRules.SameFile(editor.ImagePath, item.Path));
@@ -517,7 +511,6 @@ namespace ScreenLine
             if (notice != null) notice.Close();
             foreach (var editor in Editors.ToArray()) editor.CloseWithoutPrompt();
             TrayMenu.Close();
-            Gallery.Changed -= SyncAutoHang;
             Texts.Changed -= Shelf.UpdateTexts;
             Captures.Dispose();
             events.Dispose();

@@ -78,7 +78,7 @@ namespace ScreenLine
         internal bool ChoosingBasket { get; set; }
         internal bool ChoosingTexts { get; set; }
         internal bool Capturing { get; set; }
-        double AccessoryWidth { get { return 130; } }
+        double AccessoryWidth { get { return 86; } }
         double PhotoWidth { get { return Math.Max(1, (ActualWidth > 0 ? ActualWidth : Width) - 48 - AccessoryWidth); } }
         double LineWidth { get { return PhotoWidth + AccessoryWidth; } }
         double ScrollLimit { get { return Math.Max(0, content.Width - PhotoWidth); } }
@@ -176,12 +176,12 @@ namespace ScreenLine
                 Padding = new Thickness(6, 1, 6, 2), MinWidth = 26, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) });
             BasketButton.LayoutTransform = new ScaleTransform(0.5, 0.5);
             BasketButton.Content = basketBody; BasketButton.Width = 144; BasketButton.Height = 154; BasketButton.Focusable = false; BasketButton.Cursor = Cursors.Hand;
-            BasketButton.ToolTip = "打开图片篮子";
+            BasketButton.ToolTip = "打开备忘篮子";
             BasketButton.Template = (ControlTemplate)System.Windows.Markup.XamlReader.Parse("<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Button'><Border Background='#02FFFFFF'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Top'/></Border></ControlTemplate>");
             BasketButton.Click += delegate { if (BasketRequested != null) BasketRequested(); };
             BasketButton.MouseEnter += delegate { basketMotion.Target = 1.3; StartRendering(); };
             BasketButton.MouseLeave += delegate { basketMotion.Target = 0; };
-            System.Windows.Automation.AutomationProperties.SetName(BasketButton, "打开图片篮子");
+            System.Windows.Automation.AutomationProperties.SetName(BasketButton, "打开备忘篮子");
             basket.Children.Add(BasketButton); Canvas.SetLeft(BasketButton, 3); Canvas.SetTop(BasketButton, 20);
             root.Children.Add(basket);
 
@@ -322,8 +322,8 @@ namespace ScreenLine
             }
             int pending = gallery.Collected.Count(i => !gallery.Contains(i.Path));
             if (pending > pendingPictures && Revealed && !flights.Any(flight => flight.Collecting || flight.Falling)) BasketReceived();
-            pendingPictures = pending; basketCount.Text = pending.ToString();
-            System.Windows.Automation.AutomationProperties.SetItemStatus(BasketButton, basketCount.Text + " 张待挂");
+            pendingPictures = pending; basketCount.Text = (gallery.Collected.Count+gallery.Store.State.Texts.Count).ToString();
+            System.Windows.Automation.AutomationProperties.SetItemStatus(BasketButton, basketCount.Text + " 条备忘");
             LayoutCards();
         }
 
@@ -395,7 +395,7 @@ namespace ScreenLine
 
         void UpdateAccessories()
         {
-            bool pictures = true, texts = true;
+            bool pictures = true, texts = false;
             BasketButton.Visibility = basketHolder.Visibility = pictures ? Visibility.Visible : Visibility.Collapsed;
             TextButton.Visibility = textHolder.Visibility = texts ? Visibility.Visible : Visibility.Collapsed;
             textHolder.Margin = new Thickness(0, 0, pictures ? 95 : 24, 0);

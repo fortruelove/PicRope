@@ -100,7 +100,7 @@ namespace ScreenLine
         }
 
         internal void SetCard(bool text, bool note) {
-            SetLabel(ShotAction.Remove, text ? "取下放信封" : "取下放篮子");
+            SetLabel(ShotAction.Remove, "取下放篮子");
             SetLabel(ShotAction.Trash, text ? "删除文字" : note ? "删除图片和备注" : "删除图片");
             SetLabel(ShotAction.Edit, text ? "编辑文字 / 添加配图…" : "编辑图片");
             foreach (var action in new[] { ShotAction.Save, ShotAction.Locate, ShotAction.CopyBoth, ShotAction.Split, ShotAction.RemoveNote, ShotAction.RemovePicture })

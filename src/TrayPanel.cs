@@ -59,8 +59,8 @@ namespace ScreenLine
   </Style>
 </ResourceDictionary>");
 
-        internal readonly Button VisibilityButton, BasketButton, TextButton, AppearanceButton, ExitButton, MoreButton, ScreenButton;
-        internal readonly CheckBox Pictures, Text, AutoHang, PinRope, ArchiveDeleted;
+        internal readonly Button VisibilityButton, AppearanceButton, ExitButton, MoreButton, ScreenButton;
+        internal readonly CheckBox Pictures, Text, PinRope, ArchiveDeleted;
         internal readonly LightMenu MoreMenu = new LightMenu("更多操作", "");
         internal readonly LightMenu ScreenMenu = new LightMenu("显示屏幕", "") { Width = 320 };
         internal readonly TextBlock ScreenMode = new TextBlock { FontSize = 11, Foreground = LightTheme.Brush("#65717F"), VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 22, 0) };
@@ -91,13 +91,10 @@ namespace ScreenLine
             var screenArrow = Icon("chevron"); screenArrow.Width = 13; screenArrow.Height = 13; screenArrow.HorizontalAlignment = HorizontalAlignment.Right;
             ((Grid)ScreenButton.Content).Children.Add(ScreenMode); ((Grid)ScreenButton.Content).Children.Add(screenArrow);
             panel.Children.Add(ScreenButton);
-            BasketButton = Action("图片篮子", "folder"); TextButton = Action("文字信封", "envelope");
-            var entries = Pair(BasketButton, TextButton); entries.Margin = new Thickness(0, 5, 0, 2); panel.Children.Add(entries);
             panel.Children.Add(Divider());
             panel.Children.Add(new TextBlock { Text = "剪贴板收集", FontSize = 11, Foreground = LightTheme.Brush("#65717F"), Margin = new Thickness(12, 5, 0, 3) });
             Pictures = Toggle("图片", "picture", "自动获取剪贴板图片"); Text = Toggle("文字", "text", "自动获取剪贴板文字");
             panel.Children.Add(Pair(Pictures, Text));
-            AutoHang = Toggle("新图片自动上绳", "show", "新图片自动上绳"); panel.Children.Add(AutoHang);
             ArchiveDeleted = Toggle("删除时归档", "folder", "关闭：永久删除；开启：保存到软件目录下的归档文件夹"); panel.Children.Add(ArchiveDeleted);
             panel.Children.Add(Divider());
             MoreButton = Action("更多操作", "more");
