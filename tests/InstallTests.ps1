@@ -17,7 +17,8 @@ $module = New-Module -ArgumentList $root,$InstallerPath -ScriptBlock {
     function Read-Host { param($Prompt) $global:PicRopeTestPrompts++; return $global:PicRopeTestAnswer }
     function Get-Item {
         param($LiteralPath,[switch]$Force)
-        if ($LiteralPath -eq (Microsoft.PowerShell.Management\Join-Path $global:PicRopeTestRoot 'installed\PicRope.exe')) {
+        # Installer canonicalizes paths; TEMP can use a short-name or noncanonical prefix.
+        if ($LiteralPath.EndsWith('\installed\PicRope.exe', [StringComparison]::OrdinalIgnoreCase)) {
             return [pscustomobject]@{VersionInfo=[pscustomobject]@{FileVersion=$global:PicRopeTestLocalVersion}}
         }
         Microsoft.PowerShell.Management\Get-Item -LiteralPath $LiteralPath -Force:$Force
