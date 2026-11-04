@@ -315,7 +315,7 @@ namespace ScreenLine
                     cards.Add(item.Path, card);
                     content.Children.Add(card);
                 }
-                bool changed = card.UpdateImage();
+                bool changed = card.UpdateImage(gallery.PicturePaths(item).Length);
                 card.SetBackground(gallery.Store.CardColor(item.Path));
                 PinnedImageWindow pinnedImage;
                 if (changed && pins.TryGetValue(item.Path, out pinnedImage)) pinnedImage.UpdateImage();
@@ -759,6 +759,13 @@ namespace ScreenLine
         readonly TextBlock paper = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap, TextTrimming = TextTrimming.CharacterEllipsis, MaxHeight = 100, Width = 138, Margin = new Thickness(10), Foreground = LightTheme.Brush("#283343") };
         string displayedText;
         readonly Button close = new Button();
+        readonly Border pictureBadge = new Border {
+            Background = LightTheme.Brush("#E622344E"), CornerRadius = new CornerRadius(5),
+            Padding = new Thickness(5, 2, 5, 2), Margin = new Thickness(0, 7, 7, 0),
+            HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
+            IsHitTestVisible = false, Visibility = Visibility.Collapsed,
+            Child = new TextBlock { Foreground = Brushes.White, FontSize = 10, FontWeight = FontWeights.SemiBold }
+        };
         readonly Border copied = new Border();
         readonly RotateTransform tilt = new RotateTransform(0, 82, 8);
         Point position;
@@ -837,6 +844,7 @@ namespace ScreenLine
             close.ToolTip = item.IsText ? "删除文字卡片" : "删除图片和备注";
             close.Click += delegate { act(ShotAction.Trash, item); };
             imageLayer.Children.Add(close);
+            imageLayer.Children.Add(pictureBadge);
             Surface.Child = imageLayer;
             Children.Add(Surface);
             var clipTransform = new TransformGroup();
@@ -900,17 +908,22 @@ namespace ScreenLine
             clip.Apply(theme, colorIndex);
         }
 
-        public bool UpdateImage()
+        int displayedPictureCount;
+
+        public bool UpdateImage(int pictureCount = 1)
         {
             string value = Item.IsText ? Item.Text.Content : Item.Note;
-            if (displayed == Item.Image && displayedText == value) return false;
+            if (displayed == Item.Image && displayedText == value && displayedPictureCount == pictureCount) return false;
+            displayedPictureCount = pictureCount;
+            pictureBadge.Visibility = pictureCount > 1 ? Visibility.Visible : Visibility.Collapsed;
+            ((TextBlock)pictureBadge.Child).Text = pictureCount > 1 ? "共 " + pictureCount + " 张" : "";
             displayedText = value;
             paper.Visibility = Item.IsText ? Visibility.Visible : Visibility.Collapsed;
             photo.Visibility = Item.IsText ? Visibility.Collapsed : Visibility.Visible;
             caption.Visibility = !Item.IsText && !string.IsNullOrEmpty(value) ? Visibility.Visible : Visibility.Collapsed;
             paper.Text = Item.IsText ? value : ""; caption.Text = Item.IsText ? "" : value;
             Surface.ToolTip = string.IsNullOrEmpty(value) ? null : (object)(value.Length > 600 ? value.Substring(0,600)+"…" : value);
-            menu.SetCard(Item.IsText, !string.IsNullOrEmpty(value));
+            menu.SetCard(Item.IsText, !string.IsNullOrEmpty(value), pictureCount > 1);
             if (Item.IsText) {
                 Surface.Width = 158; Surface.Height = 120;
                 SetLeft(Surface, (Width-Surface.Width)/2); SetTop(Surface,20);

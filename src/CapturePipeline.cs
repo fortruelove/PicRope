@@ -162,6 +162,7 @@ namespace ScreenLine
 
         public async Task<bool> Import(string path, CaptureSource? source, bool announce)
         {
+            if (gallery.IsAttachedPicture(path)) return true;
             if (source.HasValue ? gallery.Collected.Any(i => FileRules.SameFile(i.Path, path)) : gallery.Contains(path)) return true;
             try
             {

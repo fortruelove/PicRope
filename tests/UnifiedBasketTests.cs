@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -19,10 +19,28 @@ var text=c.Texts.Create("会议文字\n保留缩进");
 var bitmap=BitmapSource.Create(80,60,96,96,PixelFormats.Bgra32,null,new byte[80*60*4],80*4);
 string p1=Path.Combine(root,"picture.png"),p2=Path.Combine(root,"combined.png");File.WriteAllBytes(p1,ImageContent.EncodeClipboard(bitmap));File.WriteAllBytes(p2,ImageContent.EncodeClipboard(bitmap));
 var picture=c.Gallery.ImportCard(p1,ImageContent.Read(p1),"",false);var pair=c.Gallery.ImportCard(p2,ImageContent.Read(p2),"图文备注",true);
+var picker = new BasketPickerWindow(c.Gallery, picture, new CaptureItem[0], new TextItem[0]) { Owner = c.Shelf };
+picker.Show();
+await Task.Delay(120);
+var pickerChoices = Descendants<CheckBox>(picker).ToArray();
+Check(pickerChoices.Length == 2, "从篮子选择显示图片和文字，并排除当前便签");
+foreach (var choice in pickerChoices) choice.IsChecked = true;
+var pickerSearch = Descendants<TextBox>(picker).Single();
+pickerSearch.Text = "无匹配内容";
+Check(picker.Pictures.SequenceEqual(new[] { pair }) && picker.Texts.SequenceEqual(new[] { text }),
+    "图片和文字可同时多选，搜索保留已选项");
+pickerSearch.Clear();
+picker.UpdateLayout();
+Check(Descendants<CheckBox>(picker).All(choice => choice.IsChecked == true), "清空搜索后恢复已选标记");
+Render((FrameworkElement)picker.Content, Path.Combine(root, "basket-picker.png"));
+picker.Close();
+Check(c.Gallery.Collected.Count == 2 && c.Texts.Items.Count == 1, "关闭选择窗不修改篮子内容");
 c.ShowBasket();await Task.Delay(150);var basket=c.Basket;
 Check(basket.VisibleCount==3&&c.TextWindow==null&&!c.Shelf.TextButton.IsVisible,"三种内容进入同一个篮子且信封入口隐藏");
-Check(Find(basket,"新图片自动上绳")&&Find(basket,"新文字自动上绳"),"图片与文字自动上绳横向独立显示");
-var imageBounds=basket.AutoHang.TransformToAncestor(basket).Transform(new Point());var textBounds=basket.TextAutoHang.TransformToAncestor(basket).Transform(new Point());Check(Math.Abs(textBounds.Y-imageBounds.Y)<1&&textBounds.X>imageBounds.X,"两个自动上绳开关位于同一行");
+basket.SettingsButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+await Task.Delay(60);
+Check(basket.AutoHang.IsVisible && basket.TextAutoHang.IsVisible, "设置弹层保留两个自动上绳开关");
+basket.SettingsButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 basket.TypeButtons[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(basket.ActiveType==2&&basket.VisibleCount==1,"点击文字按钮筛选");
 basket.TypeButtons[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(basket.ActiveType==0&&basket.VisibleCount==3,"再次点击当前类型取消筛选并恢复全部");
 basket.ChoiceFor(p1).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(basket.SelectedCount==1,"整卡点击选中并显示预览");
@@ -30,12 +48,15 @@ basket.ChoiceFor(p2).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(ba
 basket.ChoiceFor(p2).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));basket.ChoiceFor(p1).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(basket.SelectedCount==0,"再次点击已选卡片取消选择");
 basket.UpdateLayout();
 var origins=new[]{p1,p2,"text:"+text.Id}.Select(key=>basket.ChoiceFor(key).TransformToAncestor(basket).Transform(new Point())).ToArray();
-Check(origins.Max(point=>point.Y)-origins.Min(point=>point.Y)<1&&origins.Select(point=>point.X).Distinct().Count()==3&&basket.ChoiceFor(p1).ActualHeight<=150,"左侧恢复三列紧凑缩略图而非大行");
-var actions=new[]{basket.NewMemoButton,basket.HangButton,basket.AllTab,basket.PendingTab}.Concat(basket.TypeButtons).ToArray();
-Check(actions.Select(button=>button.TransformToAncestor(basket).Transform(new Point()).Y).Distinct().Count()==1,"操作及类型筛选按钮都在同一行");
-var originalWidth=basket.Width;basket.Width=720;basket.UpdateLayout();basket.UpdateLayout();
-var lastType=basket.TypeButtons.Last().TransformToAncestor(basket).TransformBounds(new Rect(basket.TypeButtons.Last().RenderSize));var searchBounds=basket.Search.TransformToAncestor(basket).TransformBounds(new Rect(basket.Search.RenderSize));
-Check(lastType.Right<searchBounds.Left&&searchBounds.Right<=basket.ActualWidth-16,"窄窗口下单行按钮与搜索框不重叠且保持界面内");basket.Width=originalWidth;basket.UpdateLayout();
+Check(origins.Select(point => point.Y).Distinct().Count() == 3 && origins.Select(point => point.X).Distinct().Count() == 1,
+    "备忘按时间排列为单列列表");
+var originalWidth=basket.Width;basket.Width=720;basket.UpdateLayout();
+var navBounds=basket.AllTab.TransformToAncestor(basket).TransformBounds(new Rect(basket.AllTab.RenderSize));
+var searchBounds=basket.Search.TransformToAncestor(basket).TransformBounds(new Rect(basket.Search.RenderSize));
+var editorBounds=basket.MemoEditor.TransformToAncestor(basket).TransformBounds(new Rect(basket.MemoEditor.RenderSize));
+Check(navBounds.Right <= searchBounds.Left && searchBounds.Right <= editorBounds.Left && editorBounds.Right <= basket.ActualWidth,
+    "窄窗口下筛选、搜索与正文仍保持三栏");
+basket.Width=originalWidth;basket.UpdateLayout();
 basket.ChoiceFor(p1).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 Filter(basket,2);Check(basket.SelectedCount==0&&!basket.DeleteButton.IsEnabled,"切换筛选清除隐藏条目的勾选，防止误删除");
 Filter(basket,1);Check(basket.VisibleCount==1,"图片筛选排除图文与文字");Filter(basket,2);Check(basket.VisibleCount==1&&basket.MemoEditor.Text==text.Content,"文字筛选显示完整可编辑内容");
@@ -63,8 +84,49 @@ basket.Close();Check(c.Basket==null,"删除当前图文后可关闭篮子");
 store.State.ArchiveDeleted=false;store.NotifyArchiveSettings();
 c.ShowBasket();basket=c.Basket;
 basket.SelectAllButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));basket.DeleteButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(c.Gallery.Collected.Count==0&&c.Texts.Items.Count==0&&basket.VisibleCount==0,"批量删除处理三种类型且不会复活待保存记录");
+File.WriteAllBytes(p1, ImageContent.EncodeClipboard(bitmap));
+File.Copy(p1, p2);
+var leftPicture = c.Gallery.ImportCard(p1, ImageContent.Read(p1), "图片备注", true);
+c.Gallery.ImportCard(p2, ImageContent.Read(p2), "", false);
+c.Texts.Create("额外文字");
+basket.SelectAllButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+basket.CombineButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+var group = c.Gallery.Collected.Single();
+Check(basket.VisibleCount == 1 && basket.SelectedCount == 1 && c.Texts.Items.Count == 0 &&
+      c.Gallery.PicturePaths(group).Length == 2 && basket.MemoEditor.Text.Contains("图片备注") &&
+      basket.MemoEditor.Text.Contains("额外文字"), "篮子组合按钮保留多图片和文字并显示组合详情");
+for (int attempt = 0; attempt < 20 && (!HasThumbnail(basket, Path.GetFileName(p1)) || !HasThumbnail(basket, Path.GetFileName(p2))); attempt++) {
+    basket.UpdateLayout();
+    await Task.Delay(50);
+}
+Check(HasThumbnail(basket, Path.GetFileName(p1)) && HasThumbnail(basket, Path.GetFileName(p2)) &&
+      basket.MemoEditor.Text.Contains("额外文字"), "多图详情同时显示每张缩略图和文字");
+var detailContent = (StackPanel)((Border)((DockPanel)((Grid)basket.MemoEditor.Parent).Parent).Parent).Parent;
+var detailScroll = (ScrollViewer)detailContent.Parent;
+double shortHeight = basket.MemoEditor.ActualHeight;
+basket.MemoEditor.Text = string.Join("\n", Enumerable.Repeat("长文字应随内容展开", 45));
+basket.UpdateLayout();
+Check(detailContent.Children.Count == 4 && detailScroll.ScrollableHeight > 0 &&
+      basket.MemoEditor.ActualHeight > shortHeight && basket.MemoEditor.VerticalScrollBarVisibility == ScrollBarVisibility.Disabled,
+      "图片和长文字共用滚动区，文字随内容增高");
+Render((FrameworkElement)basket.Content, Path.Combine(root, "redesigned-basket.png"));
 Console.WriteLine("统一篮子测试："+passed+" 通过，0 失败");
 }catch(Exception error){Console.WriteLine(error);Environment.ExitCode=1;}finally{if(c!=null)c.Dispose();app.Shutdown(Environment.ExitCode);}};app.Run();}
+static System.Collections.Generic.IEnumerable<T> Descendants<T>(DependencyObject node) where T : DependencyObject {
+    for (int i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++) {
+        var child = VisualTreeHelper.GetChild(node, i);
+        if (child is T) yield return (T)child;
+        foreach (var match in Descendants<T>(child)) yield return match;
+    }
+}
+static bool HasThumbnail(DependencyObject node, string name) {
+    var border = node as Border;
+    var image = border == null ? null : border.Child as Image;
+    if (image != null && image.Source != null && System.Windows.Automation.AutomationProperties.GetName(border) == name) return true;
+    for (int i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++)
+        if (HasThumbnail(VisualTreeHelper.GetChild(node, i), name)) return true;
+    return false;
+}
 static void Filter(BasketWindow basket,int type){if(type==0)basket.AllTab.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));else if(basket.ActiveType!=type)basket.TypeButtons[type-1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));}
 static bool Find(DependencyObject node,string text){var block=node as TextBlock;if(block!=null&&block.Text==text)return true;for(int n=0;n<VisualTreeHelper.GetChildrenCount(node);n++)if(Find(VisualTreeHelper.GetChild(node,n),text))return true;return false;}
 static void Render(FrameworkElement element,string path){element.UpdateLayout();var bitmap=new RenderTargetBitmap((int)Math.Ceiling(element.ActualWidth),(int)Math.Ceiling(element.ActualHeight),96,96,PixelFormats.Pbgra32);bitmap.Render(element);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));using(var file=File.Create(path))encoder.Save(file);Console.WriteLine("预览："+path);}

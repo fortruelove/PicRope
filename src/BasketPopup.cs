@@ -18,12 +18,12 @@ namespace ScreenLine
             MinWidth = MinHeight = 0;
             Content = null;
             var root = new Grid();
-            popupPointer = new Polygon { Points = new PointCollection { new Point(0, 12), new Point(12, 0), new Point(24, 12) }, Fill = Brushes.White,
+            popupPointer = new Polygon { Points = new PointCollection { new Point(0, 12), new Point(12, 0), new Point(24, 12) }, Fill = card.Background,
                 Width = 24, Height = 12, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
             card.Margin = new Thickness(16, 11, 16, 16); card.CornerRadius = new CornerRadius(12);
             root.Children.Add(card); root.Children.Add(popupPointer); Content = root;
             popupShelf.SizeChanged += PopupShelfMoved; popupShelf.LocationChanged += PopupShelfMoved; popupShelf.RopeHidden += Close;
-            Deactivated += delegate { Dispatcher.BeginInvoke(new Action(delegate { if (IsVisible && !IsActive && !TrayMenuOpen) Close(); }), System.Windows.Threading.DispatcherPriority.Background); };
+            Deactivated += delegate { Dispatcher.BeginInvoke(new Action(delegate { if (IsVisible && !IsActive && !TrayMenuOpen && !basketMenuOpen) Close(); }), System.Windows.Threading.DispatcherPriority.Background); };
             Closed += delegate
             {
                 popupShelf.SizeChanged -= PopupShelfMoved; popupShelf.LocationChanged -= PopupShelfMoved; popupShelf.RopeHidden -= Close;

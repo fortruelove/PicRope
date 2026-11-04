@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Specialized;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,9 +19,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("PicRope · 图绳")]
 [assembly: AssemblyProduct("PicRope")]
 [assembly: AssemblyDescription("图绳：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.3.1.0")]
-[assembly: AssemblyFileVersion("1.3.1.0")]
-[assembly: AssemblyInformationalVersion("1.3.1")]
+[assembly: AssemblyVersion("1.3.2.0")]
+[assembly: AssemblyFileVersion("1.3.2.0")]
+[assembly: AssemblyInformationalVersion("1.3.2")]
 
 namespace ScreenLine
 {
@@ -99,7 +100,9 @@ namespace ScreenLine
             if (events.ShortcutAvailable) TrayMenu.Shortcut.Text = "Ctrl+Alt+T";
             else Notice("Ctrl+Alt+T 已被占用，可点击托盘图标打开。");
             TrayMenu.OnToggle(TrayMenu.ArchiveDeleted, store.State.ArchiveDeleted, delegate(bool value) {
-                bool previous=store.State.ArchiveDeleted; store.State.ArchiveDeleted=value;
+                bool previous=store.State.ArchiveDeleted;
+                if (previous == value) return;
+                store.State.ArchiveDeleted=value;
                 try {store.Save();store.NotifyArchiveSettings();} catch(Exception error) {store.State.ArchiveDeleted=previous;TrayMenu.ArchiveDeleted.IsChecked=previous;store.Log(error);Notice("归档设置保存失败，请重试。");}
             });
             collect = TrayMenu.Pictures;
@@ -334,28 +337,30 @@ namespace ScreenLine
             try {
                 var dialog=new CardEditorWindow(Gallery,item,readOnly,OpenPicturePreview) {Owner=Shelf};
                 if(dialog.ShowDialog()!=true || readOnly)return;
-                CaptureItem picture=dialog.SelectedPicture;
-                string newPath=null;
-                if(dialog.NewPicture!=null) {
-                    string path=Path.Combine(Gallery.Store.Inbox,"配图_"+Guid.NewGuid().ToString("N")+dialog.NewPicture.Extension);
-                    Directory.CreateDirectory(Gallery.Store.Inbox);
-                    await Task.Run(()=>File.WriteAllBytes(path,dialog.NewPicture.Bytes));
-                    newPath=path;
-                    picture=new CaptureItem(path,ImageContent.Decode(dialog.NewPicture.Bytes));
+                var selected = new[] { item }.Concat(dialog.SelectedPictures)
+                    .Concat(dialog.SelectedTexts.Select(text => new CaptureItem(text))).ToArray();
+                var newPictures = new List<CaptureItem>();
+                var newPaths = new List<string>();
+                try {
+                    foreach (var picture in dialog.NewPictures) {
+                        var image = ImageContent.Decode(picture.Bytes);
+                        Directory.CreateDirectory(Gallery.Store.Inbox);
+                        string path = Path.Combine(Gallery.Store.Inbox, "配图_" + Guid.NewGuid().ToString("N") + picture.Extension);
+                        newPaths.Add(path);
+                        await Task.Run(() => File.WriteAllBytes(path, picture.Bytes));
+                        newPictures.Add(new CaptureItem(path, image));
+                    }
+                    if (dialog.RemovedPictures.Count == 0 && selected.Length == 1 && newPictures.Count <= 1 && Gallery.PicturePaths(item).Length <= 1)
+                        Gallery.SaveCard(item, newPictures.FirstOrDefault(), dialog.Body.Text, null, false, newPictures.Count > 0);
+                    else
+                        Gallery.Combine(selected, dialog.Body.Text, newPictures, dialog.RemovedPictures);
                 }
-                string content=dialog.Body.Text;
-                bool append=dialog.SelectedText!=null && dialog.Append;
-                if(picture!=null && append && !item.IsText && !string.IsNullOrEmpty(Gallery.Note(item))) {
-                    content=Gallery.Note(item)+"\n"+content;
-                    append=false;
+                catch {
+                    foreach (string path in newPaths) {
+                        if (!Gallery.Collected.Any(card => Gallery.PicturePaths(card).Contains(path))) File.Delete(path);
+                    }
+                    throw;
                 }
-                if(picture!=null && !string.IsNullOrEmpty(Gallery.Note(picture))) {
-                    var choice=MessageBox.Show(dialog.Owner,"所选图片已有备注。是：追加文字；否：替换备注；取消：放弃合并。","合并内容卡片",MessageBoxButton.YesNoCancel);
-                    if(choice==MessageBoxResult.Cancel)return;
-                    append=choice==MessageBoxResult.Yes;
-                }
-                try { Gallery.SaveCard(item,picture,content,dialog.SelectedText,append,newPath!=null); }
-                catch { if(newPath!=null)File.Delete(newPath); throw; }
                 Texts.Notify(); Shelf.Update();
             } catch(Exception error){Gallery.Store.Log(error);Notice("保存未完成："+error.Message);}
             finally {Shelf.ChoosingTexts=false;}
@@ -407,6 +412,7 @@ namespace ScreenLine
             TrayMenu.Placement = PlacementMode.RelativePoint;
             TrayMenu.HorizontalOffset = point.X - 16;
             TrayMenu.VerticalOffset = point.Y - 16;
+            TrayMenu.ArchiveDeleted.IsChecked = Gallery.Store.State.ArchiveDeleted;
             TrayMenu.IsOpen = true;
         }
 
@@ -431,8 +437,7 @@ namespace ScreenLine
         {
             try
             {
-                if (action==ShotAction.CardEdit || (item.IsText && action==ShotAction.Edit)) {EditCard(item,false);return;}
-                if (action==ShotAction.Open && (item.IsText || !string.IsNullOrEmpty(Gallery.Note(item)))) {EditCard(item,true);return;}
+                if (action == ShotAction.Open || action == ShotAction.CardEdit) { EditCard(item, false); return; }
                 if (action==ShotAction.CopyText || (item.IsText && action==ShotAction.Copy)) {
                     string value=item.IsText ? item.Text.Content : Gallery.Note(item);
                     var data=new DataObject();data.SetText(value);data.SetData(ClipboardRules.OwnFormat,"1");
@@ -460,14 +465,13 @@ namespace ScreenLine
                             png = ImageContent.EncodeClipboard(image);
                         }
                         payload.SetData("PNG", new MemoryStream(png));
-                        payload.SetFileDropList(new StringCollection { item.Path });
+                        var files = new StringCollection();
+                        files.AddRange(Gallery.PicturePaths(item));
+                        payload.SetFileDropList(files);
                         payload.SetData(ClipboardRules.OwnFormat, "1");
                         if(action==ShotAction.CopyBoth && !string.IsNullOrEmpty(Gallery.Note(item))) payload.SetText(Gallery.Note(item));
                         await WindowsClipboard.Write(payload);
                         Shelf.ShowCopied(item.Path);
-                        break;
-                    case ShotAction.Open:
-                        OpenPicturePreview(item.Path);
                         break;
                     case ShotAction.Edit:
                         var existing = Editors.Find(editor => FileRules.SameFile(editor.ImagePath, item.Path));

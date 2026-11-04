@@ -69,6 +69,50 @@ Check(failed && colorsStore.CardColor(colorKeys[0])==4,"选色保存失败恢复
 }
 var legacyColors=legacy.CardColor("text:old"); legacy.Save();
 Check(new StateStore(old).CardColor("text:old")==legacyColors,"旧数据一次性补齐颜色并持久保存");
+var groupStore = new StateStore(Path.Combine(root, "group", "data"));
+var groupGallery = new Gallery(groupStore);
+var groupTexts = new TextCollection(groupStore);
+var firstText = groupTexts.Create("第一段");
+var secondText = groupTexts.Create("第二段");
+string firstPath = Path.Combine(groupStore.Root, "a.png");
+string secondPath = Path.Combine(groupStore.Root, "b.png");
+File.WriteAllBytes(firstPath, ImageContent.EncodeClipboard(bitmap));
+File.Copy(firstPath, secondPath);
+var firstPicture = groupGallery.Collect(firstPath, ImageContent.Read(firstPath));
+var secondPicture = groupGallery.Collect(secondPath, ImageContent.Read(secondPath));
+var group = groupGallery.Combine(new[] { new CaptureItem(firstText), firstPicture, new CaptureItem(secondText), secondPicture });
+Check(groupGallery.Collected.Count == 1 && groupGallery.Hanging.Single() == group && groupTexts.Items.Count == 0, "多图片和文字合成一张挂绳便签");
+Check(groupGallery.Note(group) == "第一段\n\n第二段" && groupGallery.PicturePaths(group).SequenceEqual(new[] {firstPath, secondPath}), "保留选中的图片和文字顺序");
+var reopened = new Gallery(new StateStore(groupStore.Root));
+Check(reopened.PicturePaths(group).SequenceEqual(new[] {firstPath, secondPath}), "重启后仍能找到组合中的附图");
+groupStore.SetCardArchive(group.Path, false);
+var initialGroup = group;
+using (var locked = new FileStream(Path.Combine(groupStore.Root, "state.json"), FileMode.Open, FileAccess.Read, FileShare.None)) {
+    bool failed = false;
+    try { groupGallery.Combine(new[] { group }, removedPictures: new[] { firstPath }); }
+    catch (IOException) { failed = true; }
+    Check(failed && groupGallery.Collected.Single() == initialGroup && groupGallery.PicturePaths(group).Length == 2,
+        "拆出图片保存失败时原组合保持完整");
+}
+group = groupGallery.Combine(new[] { group }, removedPictures: new[] { firstPath });
+var releasedPicture = groupGallery.Collected.Single(card => card.Path == firstPath);
+Check(group.Path == secondPath && groupGallery.Hanging.Single() == group && groupGallery.Note(releasedPicture) == "" &&
+      File.Exists(firstPath) && File.Exists(secondPath), "移除封面后以剩余图片继续挂绳，移出的图片独立留在篮子");
+groupStore.State.ArchiveDeleted = true;
+Check(!groupStore.ShouldArchive(group.Path), "更换封面后仍保留组合的单条归档设置");
+var remainingText = groupGallery.Combine(new[] { group }, removedPictures: new[] { secondPath });
+Check(remainingText.IsText && remainingText.Text.Content == "第一段\n\n第二段" &&
+      groupGallery.Hanging.Single().Text == remainingText.Text && groupGallery.Collected.Count == 2,
+      "移除最后一张图片保留原文字和独立图片");
+group = groupGallery.Combine(new[] { remainingText, releasedPicture, groupGallery.Collected.Single(card => card.Path == secondPath) });
+groupGallery.Split(group, groupTexts);
+Check(groupGallery.Collected.Count == 2 && groupTexts.Items.Single().Content == "第一段\n\n第二段", "拆分保留所有图片和全文");
+group = groupGallery.Combine(groupGallery.Collected.ToArray());
+groupStore.State.ArchiveDeleted = true;
+groupStore.SetCardArchive(group.Path, true);
+groupGallery.DeleteCard(group);
+Check(!File.Exists(firstPath) && !File.Exists(secondPath) &&
+      Directory.GetFiles(groupStore.ArchiveRoot, "*-image-*.png", SearchOption.AllDirectories).Length == 2, "归档和删除处理组内所有图片");
 Console.WriteLine("卡片测试全部通过");
 }
 }}

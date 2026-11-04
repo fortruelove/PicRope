@@ -66,7 +66,6 @@ namespace ScreenLine
             panel.Children.Add(Action("编辑", "edit", ShotAction.Edit, execute));
             panel.Children.Add(Action("保存副本…", "save", ShotAction.Save, execute));
             panel.Children.Add(Action("打开位置", "folder", ShotAction.Locate, execute));
-            panel.Children.Add(Action("关联 / 编辑图文…", "edit", ShotAction.CardEdit, execute));
             panel.Children.Add(Action("复制文字", "copy", ShotAction.CopyText, execute));
             panel.Children.Add(Action("复制图片和文字", "copy", ShotAction.CopyBoth, execute));
             panel.Children.Add(Action("拆分为图片和文字", "folder", ShotAction.Split, execute));
@@ -99,13 +98,20 @@ namespace ScreenLine
             Opened += delegate { Focus(); };
         }
 
-        internal void SetCard(bool text, bool note) {
+        internal void SetCard(bool text, bool note, bool multiplePictures = false) {
             SetLabel(ShotAction.Remove, "取下放篮子");
             SetLabel(ShotAction.Trash, text ? "删除文字" : note ? "删除图片和备注" : "删除图片");
-            SetLabel(ShotAction.Edit, text ? "编辑文字 / 添加配图…" : "编辑图片");
+            SetLabel(ShotAction.Edit, "编辑图片");
+            Actions[ShotAction.Edit].Visibility = text ? Visibility.Collapsed : Visibility.Visible;
             foreach (var action in new[] { ShotAction.Save, ShotAction.Locate, ShotAction.CopyBoth, ShotAction.Split, ShotAction.RemoveNote, ShotAction.RemovePicture })
                 Actions[action].Visibility = text || (!note && action != ShotAction.Save && action != ShotAction.Locate) ? Visibility.Collapsed : Visibility.Visible;
             Actions[ShotAction.CopyText].Visibility = text || note ? Visibility.Visible : Visibility.Collapsed;
+            if (multiplePictures) {
+                SetLabel(ShotAction.Trash, "删除组合便签");
+                SetLabel(ShotAction.Split, "拆分组合便签");
+                Actions[ShotAction.Split].Visibility = Visibility.Visible;
+                Actions[ShotAction.RemovePicture].Visibility = Visibility.Collapsed;
+            } else SetLabel(ShotAction.Split, "拆分为图片和文字");
         }
         void SetLabel(ShotAction action, string value) {
             var button=Actions[action]; var panel=(StackPanel)button.Content;

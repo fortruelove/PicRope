@@ -23,11 +23,11 @@ namespace ScreenLine
     <Setter Property='FontFamily' Value='Microsoft YaHei UI'/><Setter Property='FontSize' Value='13'/>
     <Setter Property='Foreground' Value='#343D49'/><Setter Property='Background' Value='White'/>
     <Setter Property='BorderBrush' Value='#DCE2EA'/><Setter Property='BorderThickness' Value='1'/>
-    <Setter Property='Padding' Value='14,0'/><Setter Property='Height' Value='34'/><Setter Property='MinWidth' Value='80'/>
+    <Setter Property='HorizontalContentAlignment' Value='Center'/><Setter Property='Padding' Value='14,0'/><Setter Property='Height' Value='34'/><Setter Property='MinWidth' Value='80'/>
     <Setter Property='Cursor' Value='Hand'/><Setter Property='FocusVisualStyle' Value='{x:Null}'/>
     <Setter Property='Template'><Setter.Value><ControlTemplate TargetType='Button'>
       <Border x:Name='Surface' CornerRadius='7' Background='{TemplateBinding Background}' BorderBrush='{TemplateBinding BorderBrush}' BorderThickness='{TemplateBinding BorderThickness}'>
-        <ContentPresenter Margin='{TemplateBinding Padding}' HorizontalAlignment='Center' VerticalAlignment='Center' RecognizesAccessKey='True'/>
+        <ContentPresenter Margin='{TemplateBinding Padding}' HorizontalAlignment='{TemplateBinding HorizontalContentAlignment}' VerticalAlignment='Center' RecognizesAccessKey='True'/>
       </Border>
       <ControlTemplate.Triggers>
         <Trigger Property='IsMouseOver' Value='True'><Setter TargetName='Surface' Property='Background' Value='#F0F2F5'/></Trigger>
@@ -63,6 +63,25 @@ namespace ScreenLine
             app.Resources[typeof(ToolTip)] = styles["Hint"];
         }
 
+        internal static StackPanel IconLabel(string glyph, string label)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(new TextBlock { Text = glyph, FontFamily = new FontFamily("Segoe MDL2 Assets"),
+                Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center });
+            row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+            return row;
+        }
+
+        internal static UIElement BasketLogo(double size)
+        {
+            return new System.Windows.Shapes.Path {
+                Data = Geometry.Parse("M 6,10 C 7,3 17,3 18,10 M 2,10 L 22,10 L 19,21 Q 18.7,22 17,22 L 7,22 Q 5.3,22 5,21 Z"),
+                Stroke = Brush("#244D36"), StrokeThickness = 1.7, StrokeLineJoin = PenLineJoin.Round,
+                Stretch = Stretch.Uniform, Width = size, Height = size, VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+        }
+
         public static UIElement CloseIcon()
         {
             return new System.Windows.Shapes.Path {
@@ -72,10 +91,43 @@ namespace ScreenLine
             };
         }
 
+        internal static string MemoTitle(CaptureItem item, string text)
+        {
+            string title = (text ?? "").Trim();
+            int lineBreak = title.IndexOfAny(new[] { '\r', '\n' });
+            if (lineBreak >= 0) title = title.Substring(0, lineBreak);
+            if (title.Length == 0) return item.IsText ? "文字便签" : System.IO.Path.GetFileNameWithoutExtension(item.Path);
+            return title.Length > 40 ? title.Substring(0, 40) + "…" : title;
+        }
+
         public static Button Button(string title, Action action, string tag = null)
         {
             var button = new Button { Content = title, Style = ButtonStyle, Tag = tag };
-            button.Click += delegate { action(); };
+            if (action != null) button.Click += delegate { action(); };
+            return button;
+        }
+
+        internal static Button PictureRemoveButton(FrameworkElement imageArea, Action remove)
+        {
+            var style = new Style(typeof(Button), ButtonStyle);
+            style.Setters.Add(new Setter(UIElement.OpacityProperty, 0.0));
+            style.Setters.Add(new Setter(UIElement.IsHitTestVisibleProperty, false));
+            var hover = new DataTrigger {
+                Binding = new System.Windows.Data.Binding("IsMouseOver") { Source = imageArea },
+                Value = true
+            };
+            hover.Setters.Add(new Setter(UIElement.OpacityProperty, 1.0));
+            hover.Setters.Add(new Setter(UIElement.IsHitTestVisibleProperty, true));
+            style.Triggers.Add(hover);
+            var focus = new Trigger { Property = UIElement.IsKeyboardFocusedProperty, Value = true };
+            focus.Setters.Add(new Setter(UIElement.OpacityProperty, 1.0));
+            style.Triggers.Add(focus);
+            var button = new Button { Style = style, Content = CloseIcon(), Width = 22, Height = 22,
+                MinWidth = 0, Padding = new Thickness(0), Margin = new Thickness(5),
+                HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
+                ToolTip = "移除图片并拆成独立便签" };
+            System.Windows.Automation.AutomationProperties.SetName(button, "移除图片");
+            button.Click += delegate { remove(); };
             return button;
         }
 

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -17,6 +17,7 @@ var app=new Application {ShutdownMode=ShutdownMode.OnExplicitShutdown};LightThem
 app.Startup+=async delegate {DesktopController c=null; try {
 root=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"test-data","cards-ui-"+Guid.NewGuid().ToString("N"));
 var store=new StateStore(root);c=new DesktopController(store,Path.Combine(root,"screenshots"),false);await c.Start();
+((System.Windows.Threading.DispatcherTimer)typeof(ShelfWindow).GetField("pointer",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic).GetValue(c.Shelf)).Stop();
 var trayButtons=(Panel)c.TrayMenu.BasketToggleButton.Parent;
 Check(trayButtons.Children.IndexOf(c.TrayMenu.BasketToggleButton)==trayButtons.Children.IndexOf(c.TrayMenu.ScreenButton)+1,"显示篮子位于显示屏幕下方");
 c.ShowTrayMenu();await Task.Delay(100);c.TrayMenu.BasketToggleButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(120);
@@ -40,8 +41,34 @@ var combined=new ClipboardCard {Text="图片下方的备注摘要：完整备注
 await c.AcceptCard(combined);Check(c.Gallery.Collected.Count==1 && c.Texts.Items.Count==1 && c.Gallery.Hanging.Count==2,"一次图文只创建一张组合卡片");
 c.Shelf.Update();c.Shelf.Reveal(true,true,0); await Task.Delay(180);
 Render((FrameworkElement)c.Shelf.Content,"rope.png");
-var editor=new CardEditorWindow(c.Gallery,c.Gallery.Collected[0],false){Owner=c.Shelf};editor.Show();await Task.Delay(100);Render((FrameworkElement)editor.Content,"editor.png");editor.Close();
-c.ShowBasket();await Task.Delay(180);Check(Find(c.Basket,"粘贴") && Find(c.Basket,"配图 / 编辑…"),"篮子提供粘贴和关联入口");
+bool openedEditable = false;
+bool stagedTextVisible = false;
+app.Dispatcher.BeginInvoke(new Action(delegate {
+    var editor = app.Windows.OfType<CardEditorWindow>().FirstOrDefault(window => window.IsVisible);
+    if (editor == null) return;
+    try {
+        openedEditable = !editor.Body.IsReadOnly;
+        Render((FrameworkElement)editor.Content, "editor.png");
+        app.Dispatcher.BeginInvoke(new Action(delegate {
+            var picker = app.Windows.OfType<BasketPickerWindow>().FirstOrDefault(window => window.IsVisible);
+            if (picker == null) return;
+            try {
+                var choice = FindControl(picker, control => control is CheckBox) as CheckBox;
+                if (choice != null) choice.IsChecked = true;
+                var confirm = FindControl(picker, control => control is Button && Equals(((Button)control).Content, "加入便签")) as Button;
+                if (confirm != null) confirm.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            } finally { if (picker.IsVisible) picker.Close(); }
+        }));
+        var browse = FindControl(editor, control => control is Button && Equals(((Button)control).Content, "从篮子选择…")) as Button;
+        if (browse != null) browse.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        editor.UpdateLayout();
+        stagedTextVisible = editor.SelectedTexts.Length == 1 && Find(editor, c.Texts.Items[0].Content);
+    } finally { editor.Close(); }
+}));
+c.Act(ShotAction.Open, c.Gallery.Collected[0]);
+Check(openedEditable, "打开图文便签直接进入可编辑窗口");
+Check(stagedTextVisible && c.Texts.Items.Count == 1 && c.Gallery.Note(c.Gallery.Collected[0]) == combined.Text, "从篮子选择的文字立即预览，关闭编辑窗不提交");
+c.ShowBasket();await Task.Delay(180);Check(Find(c.Basket,"粘贴") && Find(c.Basket,"组合"),"篮子提供粘贴和关联入口");
 c.ShowBasket();Check(c.Basket==null && !c.Shelf.ChoosingBasket,"再次点击篮子入口关闭弹出层");
 c.ShowBasket();await Task.Delay(180);
 var basketOrigin=c.Basket.PointToScreen(new Point());var basketArea=c.Shelf.Display.WorkingArea;
@@ -50,7 +77,7 @@ c.ShowTexts();await Task.Delay(120);Check(c.Basket!=null && c.TextWindow==null &
 c.ShowBasket();await Task.Delay(120);
 Render((FrameworkElement)c.Basket.Content,"basket.png");
 c.Shelf.Reveal(false,false,0);Check(c.Basket==null && !c.Shelf.ChoosingBasket,"绳子收起时篮子弹出层同步关闭");c.Shelf.Reveal(true,true,0);
-c.ShowTexts();await Task.Delay(150);Check(Find(c.Basket,"粘贴") && Find(c.Basket,"挂上绳子") && Find(c.Basket,"新文字自动上绳"),"统一篮子提供粘贴、文字自动上绳和手动挂绳");Render((FrameworkElement)c.Basket.Content,"texts.png");c.Basket.Close();
+c.ShowTexts();await Task.Delay(150);Check(Find(c.Basket,"粘贴") && Find(c.Basket,"挂上绳子") ,"统一篮子提供粘贴和手动挂绳");Render((FrameworkElement)c.Basket.Content,"texts.png");c.Basket.Close();
 var original=c.Gallery.Collected[0];c.Gallery.Split(original,c.Texts);Check(c.Texts.Items.Count==2 && c.Gallery.Hanging.Count==3,"组合卡片拆分后两个内容均保留");
 var note=c.Texts.Items.First(t=>t.Content==combined.Text);c.Gallery.AttachText(original,note,false,false);Check(c.Texts.Items.Count==1 && c.Gallery.Note(original)==combined.Text,"已有文字重新关联图片");
 var restored=new StateStore(root);Check(restored.State.Texts.Count==1 && restored.State.ImageNotes.Count==1 && restored.State.Texts[0].Hanging,"组合和文字挂绳状态持久保存");
@@ -72,6 +99,14 @@ Console.WriteLine("卡片集成测试："+passed+" 通过，0 失败");
 app.Run();
 }
 static bool Find(DependencyObject node,string label){var text=node as TextBlock;if(text!=null && text.Text==label)return true;var content=node as ContentControl;if(content!=null && content.Content as string==label)return true;for(int i=0;i<VisualTreeHelper.GetChildrenCount(node);i++)if(Find(VisualTreeHelper.GetChild(node,i),label))return true;return false;}
+static DependencyObject FindControl(DependencyObject node, Func<DependencyObject, bool> match) {
+    if (match(node)) return node;
+    for (int i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++) {
+        var result = FindControl(VisualTreeHelper.GetChild(node, i), match);
+        if (result != null) return result;
+    }
+    return null;
+}
 static void Render(FrameworkElement element,string name){element.UpdateLayout();var bitmap=new RenderTargetBitmap((int)Math.Ceiling(element.ActualWidth),(int)Math.Ceiling(element.ActualHeight),96,96,PixelFormats.Pbgra32);bitmap.Render(element);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));var directory=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"card-previews");Directory.CreateDirectory(directory);using(var file=File.Create(Path.Combine(directory,name)))encoder.Save(file);}
 }
 }

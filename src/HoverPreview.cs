@@ -17,16 +17,19 @@ namespace ScreenLine
         sealed class Request
         {
             public ShotCard Card;
+            public FrameworkElement Tile;
+            public string Path;
             public ImageContent Image;
             public Rect Anchor, Area;
             public double Scale;
             public int Revision;
         }
 
+        readonly Window owner;
         readonly ShelfWindow shelf;
         readonly DispatcherTimer delay = new DispatcherTimer();
         readonly DispatcherTimer leave = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(60) };
-        ShotCard target;
+        Request target;
         Request pending;
         int revision;
         bool enabled, loading, disposed;
@@ -37,27 +40,50 @@ namespace ScreenLine
         internal BitmapSource Picture { get { return window == null ? null : window.Picture; } }
         internal PreviewWindow Window { get { return window; } }
 
-        public HoverPreview(ShelfWindow shelf, bool enabled)
+        public HoverPreview(Window owner, bool enabled)
         {
-            this.shelf = shelf; this.enabled = enabled;
+            this.owner = owner; shelf = owner as ShelfWindow; this.enabled = enabled;
             delay.Tick += delegate { delay.Stop(); Queue(); };
             leave.Tick += delegate { leave.Stop(); target = null; Hide(); };
         }
 
         public void Enter(ShotCard card)
         {
-            if (card.Item.IsText || disposed || !enabled || !shelf.Revealed || card.Busy || card.Detached || card.Flying || card.Releasing) return;
+            if (card.Item.IsText) return;
+            Enter(new Request { Card = card, Path = card.Item.Path, Image = card.Item.Image });
+        }
+
+        public void Enter(FrameworkElement tile, string path)
+        {
+            Enter(new Request { Tile = tile, Path = path });
+        }
+
+        void Enter(Request request)
+        {
+            if (!CanPreview(request)) return;
             bool quick = Visible || (DateTime.UtcNow - lastShown).TotalMilliseconds < 1000;
-            if (target == card && (Visible || delay.IsEnabled)) { leave.Stop(); return; }
+            if (target != null && target.Card == request.Card && target.Tile == request.Tile && (Visible || delay.IsEnabled)) {
+                leave.Stop();
+                return;
+            }
             delay.Stop(); leave.Stop(); revision++; pending = null;
-            target = card; Hide();
+            target = request; Hide();
             delay.Interval = TimeSpan.FromMilliseconds(quick ? 150 : 400);
             delay.Start();
         }
 
         public void Leave(ShotCard card)
         {
-            if (target != card) return;
+            if (target != null && target.Card == card) Leave();
+        }
+
+        public void Leave(FrameworkElement tile)
+        {
+            if (target != null && target.Tile == tile) Leave();
+        }
+
+        void Leave()
+        {
             delay.Stop(); revision++; pending = null;
             leave.Stop(); leave.Start();
         }
@@ -77,15 +103,20 @@ namespace ScreenLine
 
         void Queue()
         {
-            if (target == null || disposed || !enabled || !shelf.Revealed || target.Busy || target.Detached || target.Flying || target.Releasing) return;
-            Rect anchor = target.PhotoRect();
+            if (!CanPreview(target)) return;
+            Rect anchor;
+            if (target.Card != null) anchor = target.Card.PhotoRect();
+            else {
+                var tile = target.Tile;
+                anchor = new Rect(tile.PointToScreen(new Point()), tile.PointToScreen(new Point(tile.ActualWidth, tile.ActualHeight)));
+            }
             var screen = Forms.Screen.FromPoint(new System.Drawing.Point((int)(anchor.Left + anchor.Width / 2), (int)anchor.Bottom));
             var area = screen.WorkingArea;
-            pending = new Request {
-                Card = target, Image = target.Item.Image, Anchor = anchor,
-                Area = new Rect(area.Left, area.Top, area.Width, area.Height),
-                Scale = WindowsNative.MonitorScale(screen), Revision = revision
-            };
+            target.Anchor = anchor;
+            target.Area = new Rect(area.Left, area.Top, area.Width, area.Height);
+            target.Scale = WindowsNative.MonitorScale(screen);
+            target.Revision = revision;
+            pending = target;
             if (!loading) Load();
         }
 
@@ -103,25 +134,35 @@ namespace ScreenLine
                 catch (InvalidOperationException) { }
                 catch (FormatException) { }
                 if (!IsCurrent(request)) continue;
-                if (window == null) window = new PreviewWindow(shelf);
+                if (window == null) window = new PreviewWindow(owner);
                 PreviewWindow prepared = window;
                 bool ready = await prepared.Prepare(image, request.Image, request.Anchor, request.Area, request.Scale);
                 if (!ready || !IsCurrent(request) || window != prepared || !prepared.IsVisible) continue;
-                CurrentItem = request.Card.Item; lastShown = DateTime.UtcNow; prepared.Present();
+                CurrentItem = request.Card == null ? null : request.Card.Item; lastShown = DateTime.UtcNow; prepared.Present();
             }
             loading = false;
         }
 
         bool IsCurrent(Request request)
         {
-            return !disposed && request.Revision == revision && target == request.Card && request.Image == request.Card.Item.Image
-                && enabled && shelf.Revealed && !request.Card.IsDisposed && !request.Card.Busy && !request.Card.Detached;
+            return request.Revision == revision && target == request && CanPreview(request);
+        }
+
+        bool CanPreview(Request request)
+        {
+            if (disposed || !enabled || request == null) return false;
+            if (request.Card == null)
+                return request.Tile.IsVisible && request.Tile.IsMouseOver && PresentationSource.FromVisual(request.Tile) != null;
+            var card = request.Card;
+            return shelf.Revealed && !card.IsDisposed && !card.Busy && !card.Detached &&
+                !card.Flying && !card.Releasing && request.Image == card.Item.Image;
         }
 
         static BitmapSource Read(Request request)
         {
+            if (request.Image == null) request.Image = ImageContent.Read(request.Path, false);
             Size size = PreviewSize(request.Image.PixelWidth, request.Image.PixelHeight, request.Anchor, request.Area, request.Scale);
-            using (var stream = new FileStream(request.Card.Item.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (var stream = new FileStream(request.Path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
             {
                 var image = new BitmapImage(); image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad;
                 image.StreamSource = stream; image.DecodePixelWidth = Math.Max(1, (int)Math.Ceiling(size.Width * request.Scale));
@@ -169,7 +210,7 @@ namespace ScreenLine
         readonly Grid body = new Grid();
         internal BitmapSource Picture { get { return image.Source as BitmapSource; } }
 
-        public PreviewWindow(ShelfWindow owner)
+        public PreviewWindow(Window owner)
         {
             Owner = owner; Title = "图片预览 · 图绳";
             WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
