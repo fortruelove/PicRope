@@ -59,7 +59,7 @@ namespace ScreenLine
   </Style>
 </ResourceDictionary>");
 
-        internal readonly Button VisibilityButton, AppearanceButton, ExitButton, MoreButton, ScreenButton;
+        internal readonly Button VisibilityButton, AppearanceButton, ExitButton, MoreButton, ScreenButton, BasketToggleButton;
         internal readonly CheckBox Pictures, Text, PinRope, ArchiveDeleted;
         internal readonly LightMenu MoreMenu = new LightMenu("更多操作", "");
         internal readonly LightMenu ScreenMenu = new LightMenu("显示屏幕", "") { Width = 320 };
@@ -91,6 +91,7 @@ namespace ScreenLine
             var screenArrow = Icon("chevron"); screenArrow.Width = 13; screenArrow.Height = 13; screenArrow.HorizontalAlignment = HorizontalAlignment.Right;
             ((Grid)ScreenButton.Content).Children.Add(ScreenMode); ((Grid)ScreenButton.Content).Children.Add(screenArrow);
             panel.Children.Add(ScreenButton);
+            BasketToggleButton = Action("显示篮子", "folder"); panel.Children.Add(BasketToggleButton);
             panel.Children.Add(Divider());
             panel.Children.Add(new TextBlock { Text = "剪贴板收集", FontSize = 11, Foreground = LightTheme.Brush("#65717F"), Margin = new Thickness(12, 5, 0, 3) });
             Pictures = Toggle("图片", "picture", "自动获取剪贴板图片"); Text = Toggle("文字", "text", "自动获取剪贴板文字");

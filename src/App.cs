@@ -18,9 +18,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("PicRope · 图绳")]
 [assembly: AssemblyProduct("PicRope")]
 [assembly: AssemblyDescription("图绳：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.3.0.0")]
-[assembly: AssemblyFileVersion("1.3.0.0")]
-[assembly: AssemblyInformationalVersion("1.3.0")]
+[assembly: AssemblyVersion("1.3.1.0")]
+[assembly: AssemblyFileVersion("1.3.1.0")]
+[assembly: AssemblyInformationalVersion("1.3.1")]
 
 namespace ScreenLine
 {
@@ -85,6 +85,13 @@ namespace ScreenLine
             TrayMenu.Opened += delegate { SyncScreens(); };
             TrayMenu.ScreenMenu.Opened += delegate { SyncScreens(); };
             TrayMenu.OnAction(TrayMenu.VisibilityButton, delegate { Shelf.Toggle(); });
+            TrayMenu.OnAction(TrayMenu.BasketToggleButton, ShowBasket);
+            TrayMenu.Closed += delegate {
+                var basket=Basket;
+                if(basket==null)return;
+                basket.TrayMenuOpen=false;
+                Shelf.Dispatcher.BeginInvoke(new Action(delegate {if(Basket==basket && basket.IsVisible && !basket.IsActive)basket.Close();}));
+            };
             TrayMenu.OnToggle(TrayMenu.PinRope, store.State.KeepRopeVisible, delegate(bool value) {
                 try {Shelf.SetKeepRopeVisible(value);}
                 catch(Exception error){store.Log(error);TrayMenu.PinRope.IsChecked=store.State.KeepRopeVisible;Notice("无法保存置顶设置，请重试。");}
@@ -392,6 +399,7 @@ namespace ScreenLine
 
         internal void ShowTrayMenu()
         {
+            if(Basket!=null)Basket.TrayMenuOpen=true;
             WindowsNative.SetForegroundWindow(Shelf.Handle);
             var cursor = WindowsNative.Cursor();
             var point = Shelf.PointFromScreen(new Point(cursor.X, cursor.Y));

@@ -17,6 +17,12 @@ var app=new Application {ShutdownMode=ShutdownMode.OnExplicitShutdown};LightThem
 app.Startup+=async delegate {DesktopController c=null; try {
 root=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"test-data","cards-ui-"+Guid.NewGuid().ToString("N"));
 var store=new StateStore(root);c=new DesktopController(store,Path.Combine(root,"screenshots"),false);await c.Start();
+var trayButtons=(Panel)c.TrayMenu.BasketToggleButton.Parent;
+Check(trayButtons.Children.IndexOf(c.TrayMenu.BasketToggleButton)==trayButtons.Children.IndexOf(c.TrayMenu.ScreenButton)+1,"显示篮子位于显示屏幕下方");
+c.ShowTrayMenu();await Task.Delay(100);c.TrayMenu.BasketToggleButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(120);
+Check(c.Basket!=null&&c.Basket.IsVisible,"托盘显示篮子入口打开统一篮子");
+c.ShowTrayMenu();await Task.Delay(120);Check(c.Basket!=null,"打开托盘菜单时保留篮子以便切换关闭");
+c.TrayMenu.BasketToggleButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(50);Check(c.Basket==null,"再次点击托盘显示篮子入口关闭篮子");
 Check(!store.State.AutoClipboard && c.Shelf.BasketButton.IsVisible && !c.Shelf.TextButton.IsVisible,"自动获取关闭时仍可进入统一篮子手动粘贴");
 Check(!Find(c.Shelf,"截图会挂在这里"),"空绳不显示截图引导框");
 c.TrayMenu.PinRope.IsChecked=true;c.Shelf.Reveal(false,false,0);

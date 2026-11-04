@@ -340,9 +340,9 @@ namespace ScreenLine
             return (time.Date == DateTime.Today ? "今天 " : time.ToString("MM-dd ")) + time.ToString("HH:mm");
         }
 
-        async void ShowPreview(CaptureItem item)
+        async void ShowPreview(CaptureItem item, bool saveCurrent = true)
         {
-            if(previewItem!=item && !SaveMemo())return;
+            if(saveCurrent && previewItem!=item && !SaveMemo())return;
             int version=++previewVersion;bool changed=previewItem!=item;
             previewItem=item;previewContent=item==null?null:item.Image;
             ArchiveOption.SetKey(item==null?null:item.Path);

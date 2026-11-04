@@ -53,6 +53,15 @@ basket.MemoEditor.Text="直接新建的备忘";basket.SaveMemo();await Task.Dela
 basket.ArchiveOption.Toggle.IsChecked=true;Check(store.ShouldArchive("text:"+added.Id)&&!store.State.ArchiveDeleted,"归档开关只影响当前统一详情条目");
 basket.SelectAllButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(basket.SelectedCount==4,"全选覆盖三种类型");basket.HangButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(c.Gallery.Hanging.Count==4&&basket.SelectedCount==0,"批量挂绳同时处理图片文字图文");
 basket.UpdateLayout();Render((FrameworkElement)basket.Content,Path.Combine(Path.GetDirectoryName(root),"unified-basket.png"));
+store.State.ArchiveDeleted=true;store.NotifyArchiveSettings();
+basket.ChoiceFor(p2).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+basket.ArchiveOption.Toggle.IsChecked=false;
+basket.DeleteButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+Check(!c.Gallery.Collected.Contains(pair)&&!c.Gallery.Hanging.Contains(pair)&&!File.Exists(p2)&&!Directory.Exists(store.ArchiveRoot),"全局开启归档时，单条关闭的图文直接删除");
+Check(basket.VisibleCount==3&&basket.SaveMemo()&&basket.MemoEditor.Text!="更新后的图文\n第二行","删除当前图文后刷新详情，保存检查不再拦截退出");
+basket.Close();Check(c.Basket==null,"删除当前图文后可关闭篮子");
+store.State.ArchiveDeleted=false;store.NotifyArchiveSettings();
+c.ShowBasket();basket=c.Basket;
 basket.SelectAllButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));basket.DeleteButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(c.Gallery.Collected.Count==0&&c.Texts.Items.Count==0&&basket.VisibleCount==0,"批量删除处理三种类型且不会复活待保存记录");
 Console.WriteLine("统一篮子测试："+passed+" 通过，0 失败");
 }catch(Exception error){Console.WriteLine(error);Environment.ExitCode=1;}finally{if(c!=null)c.Dispose();app.Shutdown(Environment.ExitCode);}};app.Run();}

@@ -10,6 +10,7 @@ namespace ScreenLine
     internal sealed partial class BasketWindow
     {
         readonly ShelfWindow popupShelf;
+        internal bool TrayMenuOpen;
         Polygon popupPointer;
 
         void InitializePopup(Border card)
@@ -22,7 +23,7 @@ namespace ScreenLine
             card.Margin = new Thickness(16, 11, 16, 16); card.CornerRadius = new CornerRadius(12);
             root.Children.Add(card); root.Children.Add(popupPointer); Content = root;
             popupShelf.SizeChanged += PopupShelfMoved; popupShelf.LocationChanged += PopupShelfMoved; popupShelf.RopeHidden += Close;
-            Deactivated += delegate { if (IsVisible) Close(); };
+            Deactivated += delegate { Dispatcher.BeginInvoke(new Action(delegate { if (IsVisible && !IsActive && !TrayMenuOpen) Close(); }), System.Windows.Threading.DispatcherPriority.Background); };
             Closed += delegate
             {
                 popupShelf.SizeChanged -= PopupShelfMoved; popupShelf.LocationChanged -= PopupShelfMoved; popupShelf.RopeHidden -= Close;

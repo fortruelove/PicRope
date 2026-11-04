@@ -52,12 +52,22 @@ namespace ScreenLine {
         internal bool SaveMemo() {
             memoTimer.Stop();if(savingMemo)return true;
             if(creatingMemo){if(string.IsNullOrWhiteSpace(MemoEditor.Text))return true;}
-            else if(previewItem==null || MemoEditor.Text==MemoText(previewItem))return true;
+            else {
+                if (previewItem == null) return true;
+                bool exists = previewItem.IsText
+                    ? texts.Items.Contains(previewItem.Text)
+                    : gallery.Collected.Contains(previewItem);
+                if (!exists) {
+                    ShowPreview(null, saveCurrent: false);
+                    return true;
+                }
+                if (MemoEditor.Text == MemoText(previewItem)) return true;
+            }
             try {
                 savingMemo=true;
                 if(creatingMemo){var text=texts.Create(MemoEditor.Text);previewItem=new CaptureItem(text);memoTexts[text.Id]=previewItem;creatingMemo=false;ArchiveOption.SetKey(previewItem.Path);}
                 else if(previewItem.IsText)texts.UpdateContent(previewItem.Text,MemoEditor.Text);
-                else {if(!gallery.Collected.Contains(previewItem))throw new InvalidOperationException("备忘已被移除。");gallery.SetNote(previewItem,MemoEditor.Text);}
+                else gallery.SetNote(previewItem,MemoEditor.Text);
                 metadata.Text=MemoType(previewItem)+" · "+TimeLabel(Created(previewItem));
                 status.Text="已自动保存";
                 if(!closed)Dispatcher.BeginInvoke(new Action(delegate {if(!closed)Refresh();}));
