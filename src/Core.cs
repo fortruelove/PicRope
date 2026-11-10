@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -917,10 +917,14 @@ namespace ScreenLine
                 Store.State.CardOrder=order;
             });
         }
-        public CaptureItem ImportCard(string path, ImageContent image, string note, bool hanging)
+        public CaptureItem ImportCard(string path, ImageContent image, string note, bool hanging, IEnumerable<string> attachments = null)
         {
             var item = new CaptureItem(path, image);
             ChangeCards(delegate {
+                if (attachments != null) {
+                    if (Store.State.AttachedImages == null) Store.State.AttachedImages = new Dictionary<string, List<string>>();
+                    Store.State.AttachedImages[item.Path] = attachments.ToList();
+                }
                 Collected.Add(item); if(hanging){Items.Add(item);if(Items.Count>50)Items.RemoveAt(0);}
                 if(!string.IsNullOrWhiteSpace(note))Store.State.ImageNotes[item.Path]=note;
                 Store.State.DetachedPictures.RemoveAll(p=>string.Equals(p,item.Path,StringComparison.OrdinalIgnoreCase));

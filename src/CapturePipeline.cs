@@ -87,7 +87,7 @@ namespace ScreenLine
             foreach (string path in collected.Distinct(StringComparer.OrdinalIgnoreCase).ToArray())
             {
                 if (disposed) return;
-                if (!File.Exists(path)) continue;
+                if (!File.Exists(path) || gallery.IsAttachedPicture(path)) continue;
                 try
                 {
                     ImageContent image = await Task.Run(() => ImageContent.Read(path, false));
@@ -197,9 +197,11 @@ namespace ScreenLine
         public async Task<CaptureItem> ImportClipboardCard(ClipboardCard card, Func<bool> stillCurrent = null)
         {
             if (card == null || card.Picture == null) return null;
+            if (card.AdditionalPictures != null && card.AdditionalPictures.Length > 0)
+                return await ImportClipboardGroup(card, stillCurrent);
             var image = await Task.Run(() => ImageContent.Decode(card.Picture.Bytes));
             if (disposed || (stillCurrent != null && !stillCurrent())) return null;
-            var existing = gallery.Collected.FirstOrDefault(i => i.Image.Fingerprint == image.Fingerprint && gallery.Note(i) == (card.Text ?? ""));
+            var existing = gallery.Collected.FirstOrDefault(i => i.Image.Fingerprint == image.Fingerprint && gallery.PicturePaths(i).Length == 1 && gallery.Note(i) == (card.Text ?? ""));
             if (existing != null) { if (AutoHang) Hang(existing); return existing; }
             Directory.CreateDirectory(gallery.Store.Inbox);
             string path = Path.Combine(gallery.Store.Inbox, "粘贴_" + Guid.NewGuid().ToString("N") + card.Picture.Extension);
@@ -210,6 +212,35 @@ namespace ScreenLine
             catch { File.Delete(path); throw; }
             if (AutoHang && Arrived != null) Arrived(item, null);
             return item;
+        }
+
+        async Task<CaptureItem> ImportClipboardGroup(ClipboardCard card, Func<bool> stillCurrent)
+        {
+            var pictures = new[] { card.Picture }.Concat(card.AdditionalPictures).ToArray();
+            var paths = pictures.Select(picture => Path.Combine(gallery.Store.Inbox,
+                "粘贴_" + Guid.NewGuid().ToString("N") + picture.Extension)).ToArray();
+            try {
+                var cover = await Task.Run(() => {
+                    var image = ImageContent.Decode(card.Picture.Bytes);
+                    Directory.CreateDirectory(gallery.Store.Inbox);
+                    for (int i = 0; i < pictures.Length; i++) File.WriteAllBytes(paths[i], pictures[i].Bytes);
+                    return image;
+                });
+                if (disposed || (stillCurrent != null && !stillCurrent())) return null;
+                bool hanging = AutoHang;
+                var item = gallery.ImportCard(paths[0], cover, card.Text, hanging, paths.Skip(1));
+                if (hanging && Arrived != null) Arrived(item, null);
+                return item;
+            }
+            finally {
+                if (!gallery.Collected.Any(item => item.Path == paths[0])) {
+                    foreach (string path in paths) {
+                        try { File.Delete(path); }
+                        catch (IOException error) { gallery.Store.Log(error); }
+                        catch (UnauthorizedAccessException error) { gallery.Store.Log(error); }
+                    }
+                }
+            }
         }
 
         public async Task<string> AcceptCapture(BitmapSource picture)

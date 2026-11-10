@@ -19,9 +19,9 @@ using Forms = System.Windows.Forms;
 [assembly: AssemblyTitle("PicRope · 图绳")]
 [assembly: AssemblyProduct("PicRope")]
 [assembly: AssemblyDescription("图绳：把截图挂在屏幕上沿，随手复制、拖拽和保存。")]
-[assembly: AssemblyVersion("1.3.2.0")]
-[assembly: AssemblyFileVersion("1.3.2.0")]
-[assembly: AssemblyInformationalVersion("1.3.2")]
+[assembly: AssemblyVersion("1.3.3.0")]
+[assembly: AssemblyFileVersion("1.3.3.0")]
+[assembly: AssemblyInformationalVersion("1.3.3")]
 
 namespace ScreenLine
 {
@@ -323,9 +323,11 @@ namespace ScreenLine
         internal async Task<string> PasteCard(bool pictureRequired)
         {
             try {
-                var card=await CardClipboard.Read(WindowsNative.GetClipboardSequenceNumber(),true);
+                var card=await CardClipboard.Read(WindowsNative.GetClipboardSequenceNumber(),true, multiple: true);
                 if(card==null || (pictureRequired && card.Picture==null))return pictureRequired ? "剪贴板中没有图片" : "剪贴板中没有文字或图片";
                 await AcceptCard(card);
+                if (card.AdditionalPictures != null && card.AdditionalPictures.Length > 0)
+                    return "已将 " + (1 + card.AdditionalPictures.Length) + " 张图片粘贴为一条备忘";
                 return card.Picture!=null ? "已粘贴到备忘篮子" : "已粘贴文字";
             } catch(Exception error){Gallery.Store.Log(error); return "粘贴未完成，请重试";}
         }

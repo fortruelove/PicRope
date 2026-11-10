@@ -94,6 +94,13 @@ var guard=new System.Windows.Threading.DispatcherTimer {Interval=TimeSpan.FromMi
 guard.Tick+=delegate{var dialog=FindWindow(null,"删除内容卡片");if(dialog!=IntPtr.Zero){confirmation=true;SendMessage(dialog,0x0111,new IntPtr(7),IntPtr.Zero);}};
 guard.Start();try{c.Act(ShotAction.Trash,deletion);}finally{guard.Stop();}
 Check(!confirmation && !File.Exists(deletion.Path) && !c.Gallery.Collected.Contains(deletion) && !new StateStore(root).State.ImageNotes.ContainsKey(deletion.Path),"图文组合删除不弹确认框，图片永久删除并清除备注");
+int beforeBatch = c.Gallery.Collected.Count;
+var batch = new ClipboardCard { Picture = combined.Picture, AdditionalPictures = new[] { combined.Picture }, Text = "同批文字" };
+var pastedGroup = await c.Captures.ImportClipboardCard(batch);
+var persisted = new StateStore(root).State;
+Check(c.Gallery.Collected.Count == beforeBatch + 1 && c.Gallery.PicturePaths(pastedGroup).Length == 2 &&
+    persisted.AttachedImages[pastedGroup.Path].Count == 1 && c.Gallery.Note(pastedGroup) == batch.Text,
+    "一次粘贴多图和文字只创建一条备忘");
 Console.WriteLine("卡片集成测试："+passed+" 通过，0 失败");
 }catch(Exception error){Console.WriteLine("失败："+error);Environment.ExitCode=1;}finally{if(c!=null)c.Dispose();app.Shutdown(Environment.ExitCode);}};
 app.Run();

@@ -38,13 +38,20 @@ try{var files=new DataObject(DataFormats.FileDrop,new[]{file});if(CardClipboard.
 var local=Path.Combine(Path.GetTempPath(),"PicRope-qq-"+Guid.NewGuid().ToString("N")+".png");File.WriteAllBytes(local,ImageContent.EncodeClipboard(image));
 try {
 var qq=new DataObject();qq.SetText("QQ混合文字\n完整备注");qq.SetData(DataFormats.Html,"<html><body><!--StartFragment--><p>QQ混合文字</p><img src=\""+new Uri(local).AbsoluteUri+"\" /><!--EndFragment--></body></html>");
+var batchFiles = new DataObject(DataFormats.FileDrop, new[] { local, local + ".missing.png", local });
+batchFiles.SetImage(image);
+var fileBatch = CardClipboard.ReadData(batchFiles, true, multiple: true).GetAwaiter().GetResult();
+if (fileBatch.Picture == null || fileBatch.AdditionalPictures.Length != 1) throw new Exception("多文件粘贴应跳过失效项，并优先于单张位图");
+var htmlBatch = new DataObject(DataFormats.Html, "<img src='" + new Uri(local).AbsoluteUri + "'><img src='https://example.invalid/image.png'><img src='" + new Uri(local).AbsoluteUri + "'>");
+var htmlCard = CardClipboard.ReadData(htmlBatch, true, multiple: true).GetAwaiter().GetResult();
+if (htmlCard.Picture == null || htmlCard.AdditionalPictures.Length != 1) throw new Exception("多图 HTML 应读取本地图片并跳过远程图片");
 var mixedCard=CardClipboard.ReadData(qq,true).GetAwaiter().GetResult();
 if(mixedCard.Picture==null || mixedCard.Text!="QQ混合文字\n完整备注")throw new Exception("QQ本地HTML图片和文字必须作为同一快照读取");
 if(CardClipboard.ReadData(qq,false).GetAwaiter().GetResult().Picture==null)throw new Exception("自动获取也支持QQ本地HTML图片");
 }finally{File.Delete(local);}
 var remote=new DataObject();remote.SetText("保留文字");remote.SetData(DataFormats.Html,"<img src='https://example.invalid/private.png'>");
 if(CardClipboard.ReadData(remote,true).GetAwaiter().GetResult().Picture!=null)throw new Exception("不自动下载远程HTML图片");
-Console.WriteLine("剪贴板卡片测试：15 通过，0 失败");
+Console.WriteLine("剪贴板卡片测试：17 通过，0 失败");
 }
 }
 internal sealed class FaultyData : IDataObject {
