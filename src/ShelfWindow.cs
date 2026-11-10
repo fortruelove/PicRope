@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -775,6 +775,7 @@ namespace ScreenLine
         readonly SpringMotion swing = new SpringMotion(2 * Math.PI / Math.Sqrt(46), 2.6 / (2 * Math.Sqrt(46)), 16) { Target = 0 };
         readonly SpringMotion scaleMotion = new SpringMotion(0.3, 0.6, 1);
         readonly DispatcherTimer hold = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(480) };
+        readonly DispatcherTimer pendingCopy = new DispatcherTimer(DispatcherPriority.Background);
         readonly DispatcherTimer flash = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.2) };
         readonly Action<ShotAction, CaptureItem> act;
         readonly ImageMenu menu;
@@ -889,6 +890,7 @@ namespace ScreenLine
             Surface.MouseLeftButtonUp += Up;
             Surface.MouseMove += Move;
             Surface.LostMouseCapture += delegate { hold.Stop(); pressed = false; };
+            pendingCopy.Tick += delegate { pendingCopy.Stop(); if (!IsDisposed) act(ShotAction.Copy, Item); };
             hold.Tick += delegate { hold.Stop(); held = true; pressed = false; Surface.ReleaseMouseCapture(); act(ShotAction.Edit, item); };
             menu = new ImageMenu(delegate(ShotAction action) { act(action, Item); });
             menu.ChooseColor = delegate(int color) { if (ChooseBackground != null) ChooseBackground(color); };
@@ -1035,7 +1037,7 @@ namespace ScreenLine
         void Down(object sender, MouseButtonEventArgs e)
         {
             e.Handled = true;
-            if (e.ClickCount == 2) { hold.Stop(); held = true; act(ShotAction.Open, Item); return; }
+            if (e.ClickCount == 2) { pendingCopy.Stop(); hold.Stop(); held = true; act(ShotAction.Open, Item); return; }
             start = e.GetPosition(this);
             pressed = true;
             held = false;
@@ -1050,7 +1052,12 @@ namespace ScreenLine
             bool copy = pressed && !held && !dragging;
             pressed = false;
             Surface.ReleaseMouseCapture();
-            if (copy) act(ShotAction.Copy, Item);
+            if (copy) {
+                // The first release may still become a double-click.
+                pendingCopy.Stop();
+                pendingCopy.Interval = TimeSpan.FromMilliseconds(System.Windows.Forms.SystemInformation.DoubleClickTime);
+                pendingCopy.Start();
+            }
         }
 
         void Move(object sender, MouseEventArgs e)
@@ -1081,7 +1088,7 @@ namespace ScreenLine
             Nudge(3);
             flash.Stop(); flash.Start();
         }
-        public void Dispose() { IsDisposed = true; hold.Stop(); flash.Stop(); menu.IsOpen = false; }
+        public void Dispose() { IsDisposed = true; pendingCopy.Stop(); hold.Stop(); flash.Stop(); menu.IsOpen = false; }
     }
 
     internal sealed class DragPreview : Window

@@ -168,13 +168,20 @@ internal sealed class CardEditorWindow : Window {
             var tools = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
             var file = LightTheme.Button("添加本地图片", delegate { ChooseFile(); renderDraft(); });
             var paste = LightTheme.Button("粘贴图片", null);
-            paste.Click += async delegate {
+            Func<bool, Task> pasteDraft = async pasteText => {
+                if (!paste.IsEnabled) return;
                 paste.IsEnabled = save.IsEnabled = false;
                 try {
-                    await PastePicture(() => closed);
+                    await PastePicture(() => closed, pasteText);
                     if (!closed) renderDraft();
                 }
                 finally { paste.IsEnabled = save.IsEnabled = true; }
+            };
+            paste.Click += async delegate { await pasteDraft(false); };
+            PreviewKeyDown += async delegate(object sender, KeyEventArgs e) {
+                if (e.Key != Key.V || Keyboard.Modifiers != ModifierKeys.Control) return;
+                e.Handled = true;
+                await pasteDraft(Body.IsKeyboardFocusWithin);
             };
             var basket = LightTheme.Button("从篮子选择…", delegate {
                 var picker = new BasketPickerWindow(gallery, item, SelectedPictures, SelectedTexts) { Owner = this };
@@ -292,15 +299,22 @@ internal sealed class CardEditorWindow : Window {
         draftThumbnails.Add(picture, thumbnail);
     }
 
-    async Task PastePicture(Func<bool> isClosed)
+    async Task PastePicture(Func<bool> isClosed, bool pasteText)
     {
         try {
-            var card = await CardClipboard.Read(WindowsNative.GetClipboardSequenceNumber(), true);
+            uint sequence = WindowsNative.GetClipboardSequenceNumber();
+            var card = await CardClipboard.Read(sequence, true, multiple: true);
             if (isClosed()) return;
-            if (card == null || card.Picture == null) { feedback.Text = "剪贴板中没有图片。"; return; }
-            AddPicture(card.Picture, ImageContent.Decode(card.Picture.Bytes).Thumbnail);
+            if (card == null || card.Picture == null) {
+                if (pasteText && sequence == WindowsNative.GetClipboardSequenceNumber()) Body.Paste();
+                else feedback.Text = "剪贴板中没有图片。";
+                return;
+            }
+            var pictures = new[] { card.Picture }.Concat(card.AdditionalPictures ?? new ClipboardPicture[0]).ToArray();
+            var thumbnails = pictures.Select(picture => ImageContent.Decode(picture.Bytes).Thumbnail).ToArray();
+            for (int i = 0; i < pictures.Length; i++) AddPicture(pictures[i], thumbnails[i]);
             if (string.IsNullOrWhiteSpace(Body.Text) && !string.IsNullOrWhiteSpace(card.Text)) Body.Text = card.Text;
-            feedback.Text = "已粘贴配图，保存后生效。";
+            feedback.Text = "已粘贴 " + pictures.Length + " 张图片，保存后生效。";
         } catch (Exception error) { feedback.Text = "粘贴未完成：" + error.Message; }
     }
 }
