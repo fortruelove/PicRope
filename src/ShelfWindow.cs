@@ -45,6 +45,8 @@ namespace ScreenLine
         internal readonly Button TextButton = new Button();
         readonly EnvelopeIcon envelopeImage = new EnvelopeIcon { Width = 96, Height = 86, Stretch = Stretch.Fill, IsHitTestVisible = false };
         readonly Canvas basketHolder, textHolder;
+        bool basketOnLeft;
+        readonly DispatcherTimer basketClick = new DispatcherTimer(DispatcherPriority.Background);
         readonly ClothesClip textClip = new ClothesClip();
         readonly TextBlock textCount = new TextBlock { FontFamily = new FontFamily("Segoe UI"), FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, TextAlignment = TextAlignment.Center };
         readonly Border textCounter = new Border();
@@ -176,9 +178,27 @@ namespace ScreenLine
                 Padding = new Thickness(6, 1, 6, 2), MinWidth = 26, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) });
             BasketButton.LayoutTransform = new ScaleTransform(0.5, 0.5);
             BasketButton.Content = basketBody; BasketButton.Width = 144; BasketButton.Height = 154; BasketButton.Focusable = false; BasketButton.Cursor = Cursors.Hand;
-            BasketButton.ToolTip = "打开备忘篮子";
+            BasketButton.ToolTip = "单击打开备忘篮子，双击切换左右位置";
             BasketButton.Template = (ControlTemplate)System.Windows.Markup.XamlReader.Parse("<ControlTemplate xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' TargetType='Button'><Border Background='#02FFFFFF'><ContentPresenter HorizontalAlignment='Center' VerticalAlignment='Top'/></Border></ControlTemplate>");
-            BasketButton.Click += delegate { if (BasketRequested != null) BasketRequested(); };
+            basketClick.Tick += delegate {
+                basketClick.Stop();
+                if (BasketRequested != null) BasketRequested();
+            };
+            BasketButton.PreviewMouseLeftButtonDown += delegate(object sender, MouseButtonEventArgs e) {
+                if (e.ClickCount != 2 || !basketClick.IsEnabled) return;
+                e.Handled = true;
+                basketClick.Stop();
+                basketOnLeft = !basketOnLeft;
+                basketHolder.HorizontalAlignment = basketOnLeft ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+                basketHolder.Margin = basketOnLeft ? new Thickness(24, 0, 0, 0) : new Thickness(0, 0, 24, 0);
+                ApplyBasketViewportMargin();
+            };
+            BasketButton.Click += delegate {
+                basketClick.Stop();
+                basketClick.Interval = TimeSpan.FromMilliseconds(System.Windows.Forms.SystemInformation.DoubleClickTime);
+                basketClick.Start();
+            };
+            Closed += delegate { basketClick.Stop(); };
             BasketButton.MouseEnter += delegate { basketMotion.Target = 1.3; StartRendering(); };
             BasketButton.MouseLeave += delegate { basketMotion.Target = 0; };
             System.Windows.Automation.AutomationProperties.SetName(BasketButton, "打开备忘篮子");
@@ -399,7 +419,7 @@ namespace ScreenLine
             BasketButton.Visibility = basketHolder.Visibility = pictures ? Visibility.Visible : Visibility.Collapsed;
             TextButton.Visibility = textHolder.Visibility = texts ? Visibility.Visible : Visibility.Collapsed;
             textHolder.Margin = new Thickness(0, 0, pictures ? 95 : 24, 0);
-            viewport.Margin = new Thickness(24, 0, 24 + AccessoryWidth, 0);
+            ApplyBasketViewportMargin();
             if (!pictures) { basketMotion.Snap(0); basketCounterMotion.Snap(1); }
             if (!texts) envelopeImage.Reset();
             drawnWidth = -1;
@@ -667,6 +687,12 @@ namespace ScreenLine
             else if (Revealed && !NeedsRendering) StopRendering();
         }
 
+        void ApplyBasketViewportMargin()
+        {
+            viewport.Margin = basketOnLeft ? new Thickness(24 + AccessoryWidth, 0, 24, 0)
+                : new Thickness(24, 0, 24 + AccessoryWidth, 0);
+        }
+
         bool OverControl(WindowsNative.Point cursor)
         {
             Point local = PointFromScreen(new Point(cursor.X, cursor.Y));
@@ -715,7 +741,7 @@ namespace ScreenLine
             }
             else edgeSince = DateTime.MaxValue;
             if (!gallery.Store.State.KeepRopeVisible && WindowsNative.FullScreen(Display, Handle)) { Reveal(false, false, 0); return; }
-            bool busy = sortingKey != null || cards.Values.Any(c => c.Busy);
+            bool busy = BasketButton.IsMouseCaptured || sortingKey != null || cards.Values.Any(c => c.Busy);
             WindowsNative.PassMouse(Handle, !Revealed || (!over && !busy));
             if (!Revealed) return;
             if (!rendering && NeedsRendering) StartRendering();
